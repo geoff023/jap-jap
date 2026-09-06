@@ -2,75 +2,88 @@
 
 ## Current Phase
 
-Phase 0 — Open-Source Foundation (complete)
+Phase 1 — Authentication (complete)
 
 ## Completed
 
 - Phase 0: Open-source foundation, dev environment, CI/CD, testing infrastructure, docs.
+- Phase 1: Authentication — registration, login, logout, JWT, protected routes, auth state.
 
 ## Frontend
 
 - React + TypeScript + Vite (`frontend/`), Tailwind CSS v4 (via `@tailwindcss/vite`).
-- React Router, TanStack Query, Zustand installed (Zustand not yet used — no
-  global client state needed until later phases).
-- Landing page (`src/pages/LandingPage.tsx`) shows the three learning modes
-  (Explore / Speak / JLPT) and a live backend health badge.
-- `src/services/api.ts` — minimal fetch client, `fetchHealth()`.
-- Test tooling: Vitest + React Testing Library (`src/App.test.tsx`, 2 tests).
-- Scripts: `dev`, `build`, `lint` (oxlint), `typecheck` (`tsc -b --noEmit`), `test`.
-- No authentication, learning features, JLPT system, AI, or STT yet — by design.
+- React Router, TanStack Query, Zustand installed. Zustand now used for auth
+  state (`src/stores/authStore.ts`, persisted to `localStorage`).
+- Pages: `LandingPage` (health badge + sign up/log in or dashboard link),
+  `LoginPage`, `RegisterPage`, `DashboardPage` (protected).
+- `src/components/ProtectedRoute.tsx` — redirects to `/login` when
+  `isAuthenticated` is false; used to guard `/dashboard`.
+- `src/services/api.ts` (health check), `src/services/authApi.ts`
+  (register/login/logout/fetchMe against the backend).
+- Test tooling: Vitest + React Testing Library, 9 tests across
+  `App.test.tsx`, `authStore.test.ts`, `ProtectedRoute.test.tsx`,
+  `LoginPage.test.tsx`.
+- No onboarding, learning features, JLPT system, AI, or STT yet — by design.
 
 ## Backend
 
 - FastAPI app (`backend/app/main.py`), CORS configured from `CORS_ORIGINS`.
-- Layered structure created per architecture doc: `api/`, `core/`, `models/`,
-  `schemas/`, `services/`, `repositories/`, `ai/`, `speech/` (all empty except
-  `core` and `api/health.py` — populated as later phases need them).
-- `app/core/config.py` — Pydantic Settings, reads `.env` (repo root or
-  `backend/.env`), all AI/speech fields optional.
-- `app/core/database.py` — lazy async MongoDB client (Motor), never raises on
-  construction; connection failures are caught, not propagated.
-- `GET /api/health` — returns `{"status": "ok", "database": "connected" |
-  "unavailable"}`; never crashes even without MongoDB running.
-- Test tooling: pytest + pytest-asyncio + httpx (`backend/tests/`, 3 tests).
-- Scripts: `pytest`, `ruff check .`, `black --check .`.
+- Layered structure: `api/`, `core/`, `models/`, `schemas/`, `services/`,
+  `repositories/`, `ai/`, `speech/`.
+- `app/core/security.py` — bcrypt password hashing, PyJWT access tokens
+  (`JWT_SECRET` / `JWT_EXPIRES_MINUTES`).
+- `app/repositories/user_repository.py` — `users` collection access,
+  including a unique index on `email` (created on app startup, best-effort).
+- `app/services/auth_service.py` — register/authenticate business logic,
+  raises typed exceptions (`EmailAlreadyRegisteredError`,
+  `InvalidCredentialsError`) that routes translate to HTTP errors.
+- `app/api/auth.py` — `POST /api/auth/register`, `/login`, `/logout`.
+- `app/api/users.py` — `GET /api/users/me` (protected).
+- `app/api/deps.py` — shared `get_user_repository` / `get_current_user`
+  (Bearer JWT) dependencies.
+- `GET /api/health` — unchanged, still never crashes without MongoDB.
+- Test tooling: pytest + pytest-asyncio + httpx, 14 tests
+  (`test_health.py`, `test_config.py`, `test_auth.py`) against a real
+  MongoDB test database (`japjap_test`), not a mock.
 
 ## Database
 
-- MongoDB via Motor async driver. No collections implemented yet.
-- Local dev: `docker compose up -d mongo` (mongo:7, port 27017) or any local
-  MongoDB instance via `MONGODB_URI`.
-- Verified locally: `/api/health` returns `"database": "connected"` against a
-  running local MongoDB instance.
-- See [DATABASE.md](DATABASE.md) for planned collections/indexes.
+- MongoDB via Motor async driver.
+- `users` collection implemented (see [DATABASE.md](DATABASE.md)): `email`
+  (unique), `hashed_password`, `created_at`.
+- Local dev: `docker compose up -d mongo` (mongo:7, port 27017), or any local
+  MongoDB via `MONGODB_URI`. Tests use a separate `japjap_test` database on
+  the same instance so they don't touch dev data.
+- CI: backend tests run against a `mongo:7` GitHub Actions service container.
 
 ## AI
 
-- Not implemented. `GEMINI_API_KEY` is an optional config field only
-  (`Settings.gemini_api_key`, `Settings.ai_enabled`). No `AIService` /
-  `GeminiService` code yet — see [AI.md](AI.md) for the planned design.
-- Verified: app starts and `/api/health` succeeds with no `GEMINI_API_KEY` set.
+- Not implemented. Unchanged from Phase 0 — see [AI.md](AI.md).
 
 ## Speech
 
-- Not implemented. `STT_API_KEY` is an optional config field only
-  (`Settings.stt_api_key`, `Settings.stt_enabled`). No `SpeechToTextService` /
-  `STTProvider` code yet.
+- Not implemented. Unchanged from Phase 0.
 
 ## Testing
 
-- Backend: pytest, 3 tests passing (`test_health.py`, `test_config.py`).
-- Frontend: Vitest + React Testing Library, 2 tests passing (`App.test.tsx`).
+- Backend: pytest, 14 tests passing (health, config, full auth flow:
+  register, duplicate email, weak password, login success/failure,
+  protected endpoint with/without/invalid token, logout).
+- Frontend: Vitest + React Testing Library, 9 tests passing (landing page,
+  auth store, protected route redirect/pass-through, login success/failure).
 - E2E (Playwright or similar): not yet set up — planned for a later phase.
 
 ## CI/CD
 
-- `.github/workflows/frontend.yml` — install, lint, typecheck, test, build.
-- `.github/workflows/backend.yml` — install, lint (ruff), format check
-  (black), test (pytest).
-- `.github/workflows/security.yml` — gitleaks secret scan, `npm audit`,
-  `pip-audit`.
-- All CI jobs run without any real API keys or a live MongoDB instance.
+- `.github/workflows/frontend.yml` — unchanged: install, lint, typecheck,
+  test, build.
+- `.github/workflows/backend.yml` — now runs a `mongo:7` service container
+  (with a health check) so auth/repository tests exercise a real database;
+  `MONGODB_URI` points at a dedicated `japjap_test` database.
+- `.github/workflows/security.yml` — unchanged.
+- Still no real Gemini/STT API keys required anywhere in CI. `JWT_SECRET`
+  uses its non-secret dev default in CI (fine — it's not protecting anything
+  real there).
 
 ## Known Issues
 
@@ -78,25 +91,36 @@ Phase 0 — Open-Source Foundation (complete)
 
 ## Technical Debt
 
-- None yet — codebase is intentionally minimal at this stage.
+- `POST /api/auth/logout` is a protected no-op (stateless JWTs, no
+  blacklist). Acceptable for now; revisit if token revocation before
+  natural expiry becomes a requirement.
+- No rate limiting on `/api/auth/*` yet — acceptable for local/early dev,
+  should be addressed before any public deployment.
 
 ## Important Decisions
 
 - The git repository root is `jap-jap/` nested one level inside the
   `self-project/jap-jap/` folder on disk (pre-existing `git init` + GitHub
   remote `geoff023/jap-jap` were preserved rather than re-initialized).
-- Tailwind CSS v4 was installed (latest at scaffold time) using the
-  `@tailwindcss/vite` plugin rather than a `tailwind.config.js` + PostCSS
-  setup (v4's recommended approach for Vite projects).
-- `create-vite`'s current React+TS template ships `oxlint` instead of ESLint;
-  kept as-is rather than swapping tooling with no functional need to.
-- A single root-level `.env.example` / `.env` is shared by both frontend
-  (`VITE_*` vars) and backend, per the master spec's example — not one file
-  per app.
-- `docs/AI.md` and the `ai`/`speech` backend packages exist as documentation
-  and structure only; no AI or STT code has been written yet (explicitly out
-  of scope for Phase 0).
+- Auth tests run against a real MongoDB (a dedicated `japjap_test` database,
+  cleaned between tests via an autouse fixture) rather than a mock database,
+  both locally and in CI (via a service container) — avoids mock/real
+  divergence bugs in the data layer.
+- Access tokens are stateless bearer JWTs (no refresh tokens, no
+  server-side session/blacklist) for MVP simplicity; `/api/auth/logout`
+  exists as a protected endpoint for a clean future extension point rather
+  than being purely client-side.
+- Frontend logout does **not** call `navigate()` after `clearAuth()` (or
+  before it) — `ProtectedRoute`'s declarative redirect-to-`/login` on
+  `isAuthenticated === false` already handles it, and an extra imperative
+  navigate briefly raced it (auth state updates before the router
+  reconciles a new location), which was observed as a "flash to /login"
+  in manual browser testing.
+- `preferredLevel` / `estimatedLevel` / `jlptTarget` (Phase 2) are still not
+  implemented — only noted here as a standing design decision from the
+  master spec, see [DATABASE.md](DATABASE.md).
 
 ## Next Phase
 
-Phase 1 — Authentication (registration, login, logout, JWT, protected routes)
+Phase 2 — Onboarding (learning goals, Japanese experience, preferred level,
+JLPT target, editable profile, unrestricted level changes)

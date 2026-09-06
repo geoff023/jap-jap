@@ -19,9 +19,22 @@ defaults:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # No real MongoDB or Gemini/STT keys are required: the health check
-    # degrades gracefully when the database is unreachable, and AI/STT
-    # features must be exercised only via mocks in tests.
+    # No real Gemini/STT keys are required: those features must be exercised
+    # only via mocks in tests. A real MongoDB is provided as a service
+    # container below — auth/repository tests exercise real database
+    # behaviour rather than a mock.
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok' --quiet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      MONGODB_URI: mongodb://localhost:27017/japjap_test
     steps:
       - uses: actions/checkout@v4
 

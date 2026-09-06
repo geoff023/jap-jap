@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { fetchHealth } from '../services/api'
+import { useAuthStore } from '../stores/authStore'
 
 const MODES = [
   {
@@ -47,6 +49,8 @@ function HealthBadge() {
 }
 
 export default function LandingPage() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-rose-50 via-white to-sky-50 text-slate-800">
       <div className="mx-auto flex max-w-3xl flex-col items-center px-6 py-20 text-center">
@@ -58,6 +62,32 @@ export default function LandingPage() {
           A playful, AI-assisted way to learn Japanese — from your first
           hiragana to N1, and everyday conversation along the way.
         </p>
+
+        <div className="mt-6 flex gap-3">
+          {isAuthenticated ? (
+            <Link
+              to="/dashboard"
+              className="rounded-lg bg-rose-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-rose-600"
+            >
+              Go to dashboard
+            </Link>
+          ) : (
+            <>
+              <Link
+                to="/register"
+                className="rounded-lg bg-rose-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-rose-600"
+              >
+                Sign up
+              </Link>
+              <Link
+                to="/login"
+                className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white"
+              >
+                Log in
+              </Link>
+            </>
+          )}
+        </div>
 
         <div className="mt-8">
           <HealthBadge />

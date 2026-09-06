@@ -1,15 +1,26 @@
 # Database
 
 JapJap uses MongoDB, accessed asynchronously via the Motor driver
-(`app/core/database.py`). No collections exist yet — Phase 0 only
-establishes the connection and a health check.
+(`app/core/database.py`).
+
+## Implemented Collections
+
+### `users` (Phase 1)
+
+Managed by `app/repositories/user_repository.py`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | |
+| `email` | string | unique index |
+| `hashed_password` | string | bcrypt hash, never returned by the API |
+| `created_at` | datetime (UTC) | |
 
 ## Planned Collections
 
 These will be introduced as the relevant phase implements them:
 
 ```
-users
 learner_profiles
 learner_skills
 learning_activities
@@ -30,10 +41,15 @@ recommendations
 ai_interactions
 ```
 
-## Planned Indexes (minimum)
+## Indexes
 
 ```
-users.email
+users.email (unique) — implemented, see UserRepository.ensure_indexes()
+```
+
+### Planned (minimum)
+
+```
 learner_profiles.userId
 test_attempts.userId
 mistakes.userId

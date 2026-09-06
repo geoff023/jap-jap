@@ -33,6 +33,56 @@ Basic root endpoint, returns a static welcome message.
 { "message": "JapJap API" }
 ```
 
+### `POST /api/auth/register`
+
+Creates a new user and returns an access token. `email` must be a valid
+address; `password` must be 8–128 characters.
+
+**Request**
+
+```json
+{ "email": "learner@example.com", "password": "supersecret1" }
+```
+
+**Response** (`201 Created`)
+
+```json
+{
+  "access_token": "<jwt>",
+  "token_type": "bearer",
+  "user": { "id": "...", "email": "learner@example.com", "created_at": "..." }
+}
+```
+
+Errors: `409 Conflict` if the email is already registered, `422` if the
+payload fails validation.
+
+### `POST /api/auth/login`
+
+Authenticates with email + password, returns the same shape as register.
+
+Errors: `401 Unauthorized` for an unknown email or wrong password.
+
+### `POST /api/auth/logout`
+
+Requires `Authorization: Bearer <token>`. Returns `204 No Content`. Access
+tokens are short-lived, stateless JWTs with no server-side session, so there
+is nothing to invalidate yet — the client discards its token. Kept as a real,
+protected endpoint so a token blacklist can be added later without an API
+change.
+
+Errors: `401 Unauthorized` if not authenticated.
+
+### `GET /api/users/me`
+
+Requires `Authorization: Bearer <token>`. Returns the current user.
+
+```json
+{ "id": "...", "email": "learner@example.com", "created_at": "..." }
+```
+
+Errors: `401 Unauthorized` if the token is missing, invalid, or expired.
+
 ## Planned Routes (added phase by phase)
 
 These are not implemented yet — listed here to reflect the intended surface
@@ -40,8 +90,7 @@ as the project grows:
 
 | Route | Phase |
 |---|---|
-| `/api/auth` | 1 — Authentication |
-| `/api/users`, `/api/onboarding`, `/api/profile` | 1–2 |
+| `/api/onboarding`, `/api/profile` | 2 |
 | `/api/activities`, `/api/vocabulary`, `/api/grammar`, `/api/kanji` | 3 |
 | `/api/tests` | 4 |
 | `/api/progress`, `/api/mistakes` | 5 |
