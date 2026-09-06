@@ -128,13 +128,15 @@ profile.
   "estimated_level": null,
   "jlpt_target": "N3",
   "onboarding_completed": true,
+  "xp": 0,
   "created_at": "...",
   "updated_at": "..."
 }
 ```
 
 `estimated_level` is `null` until a later phase's test engine / learner model
-has enough data to set it — never fabricated.
+has enough data to set it — never fabricated. `xp` only ever changes via
+activity completion (see below), never via onboarding or profile edits.
 
 Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if the
 learner hasn't completed onboarding yet.
@@ -154,6 +156,135 @@ Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if the
 learner hasn't completed onboarding yet (`POST /api/onboarding` first),
 `422` for an invalid value.
 
+### `GET /api/vocabulary`
+
+Requires `Authorization: Bearer <token>`. Returns vocabulary items, optionally
+filtered by `?level=N5`.
+
+```json
+[
+  {
+    "id": "...",
+    "term": "食べる",
+    "reading": "たべる",
+    "meaning": "to eat",
+    "level": "N5",
+    "example_sentence": "朝ごはんを食べます。",
+    "example_translation": "I eat breakfast."
+  }
+]
+```
+
+### `GET /api/grammar`
+
+Requires `Authorization: Bearer <token>`. Returns grammar concepts, optionally
+filtered by `?level=N5`. `example_sentence` contains a `___` blank;
+`answer` is the word/phrase that fills it (used by the sentence-completion
+quiz below, and shown directly here for flashcard study).
+
+```json
+[
+  {
+    "id": "...",
+    "key": "particle-ha",
+    "title": "Particle は (topic marker)",
+    "level": "N5",
+    "explanation": "は marks the topic of the sentence.",
+    "example_sentence": "わたし___学生です。",
+    "example_translation": "I am a student.",
+    "answer": "は"
+  }
+]
+```
+
+### `GET /api/activities/quiz`
+
+Requires `Authorization: Bearer <token>`. Generates a stateless multiple-choice
+quiz — nothing is persisted until `/quiz/submit`. Query params: `category`
+(`vocabulary` or `grammar`), `level` (e.g. `N5`), `size` (default 5, 1–20).
+For `vocabulary` this is a **multiple choice** activity (term → meaning); for
+`grammar` it's **sentence completion** (fill the blank in `example_sentence`).
+
+```json
+{
+  "category": "vocabulary",
+  "level": "N5",
+  "questions": [
+    { "item_id": "...", "prompt": "食べる", "options": ["to eat", "to go", "big", "water"] }
+  ]
+}
+```
+
+Options are shuffled and don't reveal which is correct — scoring happens
+server-side on submit, from the same seeded content, not from anything the
+client sends.
+
+Errors: `401 Unauthorized` if not authenticated, `400 Bad Request` if the
+category/level doesn't have at least 4 seeded items (1 correct + 3 distractors).
+
+### `POST /api/activities/quiz/submit`
+
+Requires `Authorization: Bearer <token>` **and a completed onboarding**
+(profile must exist — XP has nowhere to accrue otherwise).
+
+**Request**
+
+```json
+{
+  "category": "vocabulary",
+  "level": "N5",
+  "answers": [{ "item_id": "...", "selected": "to eat" }]
+}
+```
+
+**Response** (`200 OK`)
+
+```json
+{
+  "correct_count": 1,
+  "total": 1,
+  "xp_earned": 10,
+  "total_xp": 10,
+  "results": [{ "item_id": "...", "correct": true, "correct_answer": "to eat" }]
+}
+```
+
+10 XP per correct answer. Also records a `learning_activities` document
+(`activity_type` is `multiple_choice` for vocabulary, `sentence_completion`
+for grammar).
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if
+onboarding hasn't been completed yet.
+
+### `POST /api/activities/flashcards/complete`
+
+Requires `Authorization: Bearer <token>` and a completed onboarding.
+Flashcards are self-assessed (no server-checked "correct" answer) — the
+client reports which items the learner marked as known.
+
+**Request**
+
+```json
+{
+  "category": "vocabulary",
+  "level": "N5",
+  "reviewed": [{ "item_id": "...", "known": true }]
+}
+```
+
+**Response** (`200 OK`)
+
+```json
+{ "known_count": 1, "total": 1, "xp_earned": 5, "total_xp": 5 }
+```
+
+5 XP per item marked known (lower than quiz XP since it's self-graded, not
+server-verified). Records a `learning_activities` document with
+`activity_type: "flashcards"`.
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if
+onboarding hasn't been completed yet.
+
 ## Planned Routes (added phase by phase)
 
 These are not implemented yet — listed here to reflect the intended surface
@@ -161,7 +292,7 @@ as the project grows:
 
 | Route | Phase |
 |---|---|
-| `/api/activities`, `/api/vocabulary`, `/api/grammar`, `/api/kanji` | 3 |
+| `/api/kanji` | 3/13 |
 | `/api/tests` | 4 |
 | `/api/progress`, `/api/mistakes` | 5 |
 | `/api/ai` | 6–7 |

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { logout } from '../services/authApi'
 import { ApiError } from '../services/httpErrors'
 import { fetchProfile, updateProfile } from '../services/profileApi'
@@ -50,6 +50,31 @@ export default function DashboardPage() {
       {profileQuery.isLoading && <p className="text-sm text-slate-500">Loading your profile…</p>}
 
       {profile && (
+        <span className="rounded-full bg-amber-100 px-4 py-1.5 text-sm font-semibold text-amber-800">
+          ⭐ {profile.xp} XP
+        </span>
+      )}
+
+      {profile && (
+        <div className="grid w-full max-w-md grid-cols-2 gap-3">
+          <Link
+            to="/flashcards"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm transition hover:shadow-md"
+          >
+            <div className="text-2xl">🗂️</div>
+            <p className="mt-1 text-sm font-semibold text-slate-700">Flashcards</p>
+          </Link>
+          <Link
+            to="/quiz"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm transition hover:shadow-md"
+          >
+            <div className="text-2xl">📝</div>
+            <p className="mt-1 text-sm font-semibold text-slate-700">Quiz</p>
+          </Link>
+        </div>
+      )}
+
+      {profile && (
         <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm">
           <h2 className="text-sm font-semibold text-slate-700">Practising</h2>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -94,7 +119,7 @@ export default function DashboardPage() {
       )}
 
       <p className="max-w-md text-sm text-slate-500">
-        This is your JapJap home base. Learning features arrive in later phases.
+        This is your JapJap home base. More learning features arrive in later phases.
       </p>
       <button
         type="button"

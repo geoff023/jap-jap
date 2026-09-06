@@ -3,15 +3,22 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.activities import router as activities_router
 from app.api.auth import router as auth_router
+from app.api.grammar import router as grammar_router
 from app.api.health import router as health_router
 from app.api.onboarding import router as onboarding_router
 from app.api.profile import router as profile_router
 from app.api.users import router as users_router
+from app.api.vocabulary import router as vocabulary_router
 from app.core.config import get_settings
 from app.core.database import close_client, get_database
+from app.core.seed_data import GRAMMAR_N5, VOCABULARY_N5
+from app.repositories.activity_repository import ActivityRepository
+from app.repositories.grammar_repository import GrammarRepository
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.user_repository import UserRepository
+from app.repositories.vocabulary_repository import VocabularyRepository
 
 settings = get_settings()
 
@@ -22,6 +29,15 @@ async def lifespan(app: FastAPI):
         db = get_database()
         await UserRepository(db).ensure_indexes()
         await LearnerProfileRepository(db).ensure_indexes()
+        await ActivityRepository(db).ensure_indexes()
+
+        vocabulary_repo = VocabularyRepository(db)
+        await vocabulary_repo.ensure_indexes()
+        await vocabulary_repo.seed_if_empty(VOCABULARY_N5)
+
+        grammar_repo = GrammarRepository(db)
+        await grammar_repo.ensure_indexes()
+        await grammar_repo.seed_if_empty(GRAMMAR_N5)
     except Exception:
         # MongoDB may be unavailable (e.g. local dev without it running yet);
         # the app should still start, and /api/health reports the DB status.
@@ -45,6 +61,9 @@ app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(users_router, prefix="/api/users", tags=["users"])
 app.include_router(onboarding_router, prefix="/api/onboarding", tags=["onboarding"])
 app.include_router(profile_router, prefix="/api/profile", tags=["profile"])
+app.include_router(vocabulary_router, prefix="/api/vocabulary", tags=["vocabulary"])
+app.include_router(grammar_router, prefix="/api/grammar", tags=["grammar"])
+app.include_router(activities_router, prefix="/api/activities", tags=["activities"])
 
 
 @app.get("/")

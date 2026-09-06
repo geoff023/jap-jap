@@ -28,6 +28,7 @@ export interface LearnerProfile {
   estimated_level: PracticeLevel | null
   jlpt_target: JlptLevel | null
   onboarding_completed: boolean
+  xp: number
   created_at: string
   updated_at: string
 }

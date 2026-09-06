@@ -18,6 +18,7 @@ const testProfile: LearnerProfile = {
   preferred_level: 'N5',
   estimated_level: null,
   jlpt_target: 'N3',
+  xp: 0,
   onboarding_completed: true,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',

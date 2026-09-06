@@ -29,6 +29,9 @@ class ProfileService:
                 "estimated_level": None,
                 "onboarding_completed": True,
             },
+            # Only set on first creation: redoing onboarding must not reset
+            # XP the learner already earned.
+            set_on_insert={"xp": 0},
         )
 
     async def update_profile(self, user_id: str, updates: dict[str, Any]) -> dict[str, Any]:

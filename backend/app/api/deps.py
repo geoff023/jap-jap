@@ -7,8 +7,11 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.database import get_database
 from app.core.security import decode_access_token
+from app.repositories.activity_repository import ActivityRepository
+from app.repositories.grammar_repository import GrammarRepository
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.user_repository import UserRepository
+from app.repositories.vocabulary_repository import VocabularyRepository
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -21,6 +24,22 @@ def get_profile_repository(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> LearnerProfileRepository:
     return LearnerProfileRepository(db)
+
+
+def get_vocabulary_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> VocabularyRepository:
+    return VocabularyRepository(db)
+
+
+def get_grammar_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> GrammarRepository:
+    return GrammarRepository(db)
+
+
+def get_activity_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> ActivityRepository:
+    return ActivityRepository(db)
 
 
 async def get_current_user(

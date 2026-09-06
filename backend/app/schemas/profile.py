@@ -72,6 +72,7 @@ class LearnerProfilePublic(BaseModel):
     estimated_level: PracticeLevel | None = None
     jlpt_target: JLPTLevel | None = None
     onboarding_completed: bool
+    xp: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -85,6 +86,7 @@ def profile_to_public(profile: dict) -> LearnerProfilePublic:
         estimated_level=profile.get("estimated_level"),
         jlpt_target=profile.get("jlpt_target"),
         onboarding_completed=profile["onboarding_completed"],
+        xp=profile.get("xp", 0),
         created_at=profile["created_at"],
         updated_at=profile["updated_at"],
     )
