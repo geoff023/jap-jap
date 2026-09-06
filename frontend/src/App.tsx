@@ -8,6 +8,10 @@ import LoginPage from './pages/LoginPage'
 import OnboardingPage from './pages/OnboardingPage'
 import QuizPage from './pages/QuizPage'
 import RegisterPage from './pages/RegisterPage'
+import TestHistoryPage from './pages/TestHistoryPage'
+import TestResultPage from './pages/TestResultPage'
+import TestsPage from './pages/TestsPage'
+import TestTakingPage from './pages/TestTakingPage'
 
 const queryClient = new QueryClient()
 
@@ -48,6 +52,38 @@ function App() {
             element={
               <ProtectedRoute>
                 <QuizPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tests"
+            element={
+              <ProtectedRoute>
+                <TestsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tests/history"
+            element={
+              <ProtectedRoute>
+                <TestHistoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tests/results/:attemptId"
+            element={
+              <ProtectedRoute>
+                <TestResultPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tests/:testId"
+            element={
+              <ProtectedRoute>
+                <TestTakingPage />
               </ProtectedRoute>
             }
           />

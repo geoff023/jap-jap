@@ -56,7 +56,7 @@ export default function DashboardPage() {
       )}
 
       {profile && (
-        <div className="grid w-full max-w-md grid-cols-2 gap-3">
+        <div className="grid w-full max-w-md grid-cols-3 gap-3">
           <Link
             to="/flashcards"
             className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm transition hover:shadow-md"
@@ -70,6 +70,13 @@ export default function DashboardPage() {
           >
             <div className="text-2xl">📝</div>
             <p className="mt-1 text-sm font-semibold text-slate-700">Quiz</p>
+          </Link>
+          <Link
+            to="/tests"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm transition hover:shadow-md"
+          >
+            <div className="text-2xl">🎯</div>
+            <p className="mt-1 text-sm font-semibold text-slate-700">Tests</p>
           </Link>
         </div>
       )}

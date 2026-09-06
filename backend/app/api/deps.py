@@ -10,6 +10,9 @@ from app.core.security import decode_access_token
 from app.repositories.activity_repository import ActivityRepository
 from app.repositories.grammar_repository import GrammarRepository
 from app.repositories.profile_repository import LearnerProfileRepository
+from app.repositories.question_repository import QuestionRepository
+from app.repositories.test_attempt_repository import TestAttemptRepository
+from app.repositories.test_repository import TestRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.vocabulary_repository import VocabularyRepository
 
@@ -40,6 +43,22 @@ def get_activity_repository(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> ActivityRepository:
     return ActivityRepository(db)
+
+
+def get_question_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> QuestionRepository:
+    return QuestionRepository(db)
+
+
+def get_test_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> TestRepository:
+    return TestRepository(db)
+
+
+def get_test_attempt_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> TestAttemptRepository:
+    return TestAttemptRepository(db)
 
 
 async def get_current_user(

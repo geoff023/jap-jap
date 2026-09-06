@@ -285,6 +285,101 @@ server-verified). Records a `learning_activities` document with
 Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if
 onboarding hasn't been completed yet.
 
+### `GET /api/tests`
+
+Requires `Authorization: Bearer <token>`. Lists the available tests (no
+onboarding required — browsing is free, only submitting an attempt earns XP).
+
+```json
+[{ "id": "...", "title": "N5 Vocabulary Test", "category": "vocabulary", "level": "N5", "question_count": 12 }]
+```
+
+### `GET /api/tests/{test_id}`
+
+Requires `Authorization: Bearer <token>`. Returns the test's questions in a
+fixed order — options only, no `correct_answer`/`explanation` (those are
+only revealed after submitting, in the per-answer result).
+
+```json
+{
+  "id": "...",
+  "title": "N5 Grammar Test",
+  "category": "grammar",
+  "level": "N5",
+  "questions": [{ "id": "...", "prompt": "水___飲みます。", "options": ["を", "に", "で", "は"] }]
+}
+```
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` for an
+unknown test id.
+
+### `POST /api/tests/{test_id}/attempts`
+
+Requires `Authorization: Bearer <token>` and a completed onboarding.
+Submits every answer for the test at once; scoring happens server-side by
+re-fetching the referenced questions — the client's `selected` values are
+never trusted as "already scored."
+
+**Request**
+
+```json
+{ "answers": [{ "question_id": "...", "selected": "を" }] }
+```
+
+**Response** (`200 OK`)
+
+```json
+{
+  "id": "...",
+  "test_id": "...",
+  "test_title": "N5 Grammar Test",
+  "category": "grammar",
+  "level": "N5",
+  "score": 1,
+  "total": 1,
+  "xp_earned": 10,
+  "total_xp": 130,
+  "completed_at": "...",
+  "answers": [
+    {
+      "question_id": "...",
+      "concept": "particle-wo",
+      "selected": "を",
+      "correct": true,
+      "correct_answer": "を",
+      "explanation": "を marks the direct object of a verb."
+    }
+  ]
+}
+```
+
+10 XP per correct answer (same rate as the Phase 3 quiz). Persists a
+`test_attempts` document — this *is* the history entry, not a separate
+`learning_activities` record.
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if
+onboarding hasn't been completed yet or the test id is unknown.
+
+### `GET /api/tests/attempts`
+
+Requires `Authorization: Bearer <token>`. Lists the current user's past
+attempts (newest first), each without the per-answer breakdown — see the
+detail endpoint below for that.
+
+```json
+[{ "id": "...", "test_id": "...", "test_title": "N5 Grammar Test", "category": "grammar", "level": "N5", "score": 1, "total": 1, "xp_earned": 10, "completed_at": "..." }]
+```
+
+### `GET /api/tests/attempts/{attempt_id}`
+
+Requires `Authorization: Bearer <token>`. Returns one attempt in full,
+including the answer-by-answer breakdown (the "result page"). Ownership is
+enforced — an attempt belonging to a different user returns `404`, not
+`403`, so this endpoint never confirms whether an id merely exists.
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if the
+attempt doesn't exist or belongs to someone else.
+
 ## Planned Routes (added phase by phase)
 
 These are not implemented yet — listed here to reflect the intended surface
@@ -293,7 +388,6 @@ as the project grows:
 | Route | Phase |
 |---|---|
 | `/api/kanji` | 3/13 |
-| `/api/tests` | 4 |
 | `/api/progress`, `/api/mistakes` | 5 |
 | `/api/ai` | 6–7 |
 | `/api/conversation` | 8 |

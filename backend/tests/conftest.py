@@ -26,9 +26,10 @@ async def reset_database():
     await db["users"].delete_many({})
     await db["learner_profiles"].delete_many({})
     await db["learning_activities"].delete_many({})
-    # vocabulary/grammar_concepts are shared reference content, not
-    # per-test state — left in place so `seed_content` only inserts once
-    # per test session instead of reseeding before every test.
+    await db["test_attempts"].delete_many({})
+    # vocabulary/grammar_concepts/questions/tests are shared reference
+    # content, not per-test state — left in place so `seed_content` only
+    # inserts once per test session instead of reseeding before every test.
     close_client()
 
 
@@ -89,3 +90,13 @@ async def seed_content():
     db = get_database()
     await VocabularyRepository(db).seed_if_empty(VOCABULARY_N5)
     await GrammarRepository(db).seed_if_empty(GRAMMAR_N5)
+
+
+@pytest_asyncio.fixture
+async def seed_tests():
+    """Seed the Question/Test engine content if not already present (same
+    ASGITransport-doesn't-run-lifespan caveat as `seed_content` above)."""
+    from app.core.database import get_database
+    from app.core.test_seed_data import seed_test_engine
+
+    await seed_test_engine(get_database())
