@@ -31,7 +31,7 @@ export default function RegisterPage() {
     try {
       const response = await register(email, password)
       setAuth(response.access_token, response.user)
-      navigate('/dashboard')
+      navigate('/onboarding')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')
     } finally {

@@ -1,29 +1,8 @@
 import type { AuthResponse, User } from '../types/auth'
 import { API_BASE_URL } from './api'
+import { ApiError, parseErrorMessage } from './httpErrors'
 
-export class ApiError extends Error {
-  status: number
-
-  constructor(status: number, message: string) {
-    super(message)
-    this.status = status
-  }
-}
-
-interface ErrorBody {
-  detail?: string | { msg: string }[]
-}
-
-async function parseErrorMessage(response: Response): Promise<string> {
-  try {
-    const body: ErrorBody = await response.json()
-    if (typeof body.detail === 'string') return body.detail
-    if (Array.isArray(body.detail)) return body.detail.map((d) => d.msg).join(', ')
-  } catch {
-    // response had no JSON body
-  }
-  return `Request failed with status ${response.status}`
-}
+export { ApiError } from './httpErrors'
 
 async function postJson<T>(path: string, payload: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {

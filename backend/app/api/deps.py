@@ -7,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.database import get_database
 from app.core.security import decode_access_token
+from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.user_repository import UserRepository
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -14,6 +15,12 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 
 def get_user_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> UserRepository:
     return UserRepository(db)
+
+
+def get_profile_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> LearnerProfileRepository:
+    return LearnerProfileRepository(db)
 
 
 async def get_current_user(

@@ -83,6 +83,77 @@ Requires `Authorization: Bearer <token>`. Returns the current user.
 
 Errors: `401 Unauthorized` if the token is missing, invalid, or expired.
 
+### `POST /api/onboarding`
+
+Requires `Authorization: Bearer <token>`. Creates (or overwrites) the
+learner's profile and marks onboarding complete. Idempotent — safe to call
+again, e.g. from a "redo onboarding" flow.
+
+**Request**
+
+```json
+{
+  "goals": ["anime_manga", "jlpt"],
+  "experience": "knows_hiragana",
+  "preferred_level": "N5",
+  "jlpt_target": "N3"
+}
+```
+
+* `goals`: non-empty list of `anime_manga | travel | conversation | jlpt |
+  university | work | culture | fun`
+* `experience`: one of `complete_beginner | knows_some_words |
+  knows_hiragana | knows_hiragana_katakana | basic_grammar |
+  previously_studied`
+* `preferred_level`: one of `N5 | N4 | N3 | N2 | N1 | conversation`
+* `jlpt_target`: one of `N5 | N4 | N3 | N2 | N1`, or `null` (optional — not
+  every learner has an exam goal)
+
+**Response** (`200 OK`) — a `LearnerProfilePublic` (see below).
+
+Errors: `401 Unauthorized` if not authenticated, `422` if `goals` is empty or
+a value isn't one of the allowed options.
+
+### `GET /api/profile`
+
+Requires `Authorization: Bearer <token>`. Returns the current learner
+profile.
+
+```json
+{
+  "user_id": "...",
+  "goals": ["anime_manga", "jlpt"],
+  "experience": "knows_hiragana",
+  "preferred_level": "N5",
+  "estimated_level": null,
+  "jlpt_target": "N3",
+  "onboarding_completed": true,
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+`estimated_level` is `null` until a later phase's test engine / learner model
+has enough data to set it — never fabricated.
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if the
+learner hasn't completed onboarding yet.
+
+### `PATCH /api/profile`
+
+Requires `Authorization: Bearer <token>`. Partially updates the profile —
+**only fields present in the body are changed**; this is how
+`preferredLevel` is changed with no restriction, lock, or forced order
+(e.g. `{"preferred_level": "N3"}` after being on `N5`, then back to `N4`,
+etc. — all always `200 OK`). Send `"jlpt_target": null` to explicitly clear
+the JLPT goal.
+
+**Response** (`200 OK`) — the full updated `LearnerProfilePublic`.
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if the
+learner hasn't completed onboarding yet (`POST /api/onboarding` first),
+`422` for an invalid value.
+
 ## Planned Routes (added phase by phase)
 
 These are not implemented yet — listed here to reflect the intended surface
@@ -90,7 +161,6 @@ as the project grows:
 
 | Route | Phase |
 |---|---|
-| `/api/onboarding`, `/api/profile` | 2 |
 | `/api/activities`, `/api/vocabulary`, `/api/grammar`, `/api/kanji` | 3 |
 | `/api/tests` | 4 |
 | `/api/progress`, `/api/mistakes` | 5 |

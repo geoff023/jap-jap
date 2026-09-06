@@ -24,6 +24,7 @@ async def reset_database():
     yield
     db = get_client().get_default_database()
     await db["users"].delete_many({})
+    await db["learner_profiles"].delete_many({})
     close_client()
 
 
@@ -36,3 +37,14 @@ async def client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest_asyncio.fixture
+async def auth_headers(client):
+    """Register a fresh user and return Authorization headers for it."""
+    response = await client.post(
+        "/api/auth/register",
+        json={"email": "profile-owner@example.com", "password": "supersecret1"},
+    )
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
