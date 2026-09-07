@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 4 — Test Engine (complete)
+Phase 5 — Learner Model + Progress (complete)
 
 ## Completed
 
@@ -11,65 +11,68 @@ Phase 4 — Test Engine (complete)
 - Phase 2: Onboarding — learning goals, experience, preferred level, JLPT target, editable profile, unrestricted level changes.
 - Phase 3: Core Learning — vocabulary, grammar, flashcards, multiple choice, sentence completion, XP.
 - Phase 4: Test Engine — test creation, questions, attempts, scoring, result page, history.
+- Phase 5: Learner Model + Progress — skill mastery, progress dashboard, mistakes, activity history, estimated JLPT readiness.
 
 ## Frontend
 
 - React + TypeScript + Vite (`frontend/`), Tailwind CSS v4, React Router,
   TanStack Query, Zustand (auth only).
-- New pages: `TestsPage` (list of the 3 seeded tests), `TestTakingPage`
-  (one question at a time, submits all answers together — same pattern as
-  `QuizPage`), `TestResultPage` (score + per-answer correct/incorrect +
-  explanation), `TestHistoryPage` (past attempts, links to each result).
-- New routes: `/tests`, `/tests/:testId`, `/tests/results/:attemptId`,
-  `/tests/history` (all protected). Dashboard now has a third tile ("Tests")
-  alongside Flashcards/Quiz.
-- `src/services/testApi.ts`, `src/types/test.ts`.
-- Test tooling: Vitest + RTL, 21 tests total (added `TestsPage.test.tsx`,
-  `TestTakingPage.test.tsx`, `TestResultPage.test.tsx`,
-  `TestHistoryPage.test.tsx`).
-- No learner-skill dashboard, AI, or STT yet — by design.
+- New pages: `ProgressPage` (overall mastery, per-skill breakdown across all
+  7 tracked categories, estimated JLPT readiness with an explicit
+  "not an official JLPT prediction" disclaimer), `MistakesPage` (recurring
+  wrong-answer concepts, most-missed first), `ActivityHistoryPage` (merges
+  Phase 3 `learning_activities` and Phase 4 `test_attempts` into one
+  newest-first timeline client-side — no unified backend endpoint for this).
+- Every mastery/readiness figure renders "Not enough data yet." whenever the
+  API's `has_data` flag is false — never a bare `0%`, which would misreport
+  "measured zero" instead of "no measurement."
+- Dashboard's practice grid grew to 4 tiles (Flashcards, Quiz, Tests,
+  Progress) with a responsive 2-col/4-col grid.
+- `src/services/progressApi.ts`, `src/types/progress.ts`; added
+  `fetchActivityHistory` to `activityApi.ts`.
+- Test tooling: Vitest + RTL, 27 tests total (added `ProgressPage.test.tsx`,
+  `MistakesPage.test.tsx`, `ActivityHistoryPage.test.tsx`).
 
 ## Backend
 
-- `app/core/test_seed_data.py` — derives `Question` documents deterministically
-  from the existing `VOCABULARY_N5`/`GRAMMAR_N5` (one source of truth for N5
-  content, not a second authored question bank), then groups them into 3
-  seeded `Test` documents: "N5 Vocabulary Test", "N5 Grammar Test", "N5
-  Mixed Test". `seed_test_engine()` seeds questions first, then looks up
-  their ids fresh by category to build tests — correct whether questions
-  were just inserted or already existed.
-- `app/repositories/question_repository.py`, `test_repository.py`,
-  `test_attempt_repository.py` (test_attempts is the history/result-page
-  data source directly — no separate `learning_activities` entry is written
-  for test attempts).
-- `app/services/test_service.py` — `get_test_detail` (never exposes
-  `correct_answer`), `submit_attempt` (re-fetches questions by id and
-  recomputes correctness server-side — a client's `selected` value is
-  scored, never trusted as pre-scored; requires a completed profile, same
-  `ProfileRequiredError` pattern as Phase 3), `get_attempt` (ownership-checked:
-  a `test_attempt` belonging to another user returns 404, not 403 — never
-  confirms whether an id exists to a non-owner).
-- `app/api/tests.py` — `GET /api/tests`, `GET /api/tests/{id}`,
-  `POST /api/tests/{id}/attempts`, `GET /api/tests/attempts`,
-  `GET /api/tests/attempts/{id}`. Route registration order matters here:
-  literal paths (`/attempts`, `/attempts/{id}`) are registered before the
-  wildcard `/{test_id}`, or a request to `/attempts` would be matched as
-  `test_id="attempts"`.
-- Test tooling: pytest, 48 tests total (added `test_test_engine.py`: seeded
-  content shape, hidden-answer contract on the detail endpoint, scoring,
-  onboarding-required gating, unknown-id 404s, history listing, and
-  cross-user ownership on attempt detail).
+- `app/repositories/skill_repository.py` — `learner_skills`, one document
+  per `(user_id, category, concept)`; `record_result()` increments
+  `correct_count`/`incorrect_count` via `$inc` (which creates the field from
+  the increment if absent — no `$setOnInsert` conflict) and updates
+  `last_seen`; `list_mistakes()` filters to `incorrect_count > 0`, sorted
+  descending.
+- `app/services/learner_model_service.py` — `get_progress()` aggregates
+  `learner_skills` into per-category and overall pooled accuracy
+  (`sum(correct) / sum(correct+incorrect)`, not an unweighted average of
+  per-concept masteries), each with a `has_data` flag; estimated JLPT
+  readiness requires **both** a `jlpt_target` on the profile **and**
+  ≥5 combined vocabulary+grammar attempts before reporting a score.
+- **Enhanced Phase 3/4 services to feed the skill model**: `ActivityService`
+  now takes a `LearnerSkillRepository` and calls `record_result()` per
+  answer/reviewed item in both `submit_quiz` and `complete_flashcards`
+  (flashcards needed a new lookup of reviewed items' concepts — it
+  previously only counted booleans); `TestService` does the same in
+  `submit_attempt`, using each *question's own* category (not the test's,
+  since a "mixed" test has no single category to attribute a skill update to).
+- `app/api/progress.py` (`GET /api/progress`), `app/api/mistakes.py`
+  (`GET /api/mistakes`), and a new `GET /api/activities/history` (exposing
+  `ActivityRepository.list_by_user`, which existed since Phase 3 but was
+  never routed).
+- Test tooling: pytest, 59 tests total (added `test_progress.py`: no-data
+  baseline, mastery after a quiz, categories-without-a-source always report
+  no data, readiness gating on both jlpt_target and attempt count, mistake
+  occurrence/mastery math, and a cross-feature test proving flashcards *and*
+  test attempts both feed the same skill model as quizzes).
 
 ## Database
 
-- Added `questions` (indexed on `category`, `level`), `tests` (indexed on
-  `category`, `level`), `test_attempts` (indexed on `user_id`, append-only —
-  this *is* the test history/result data, holding a full answer breakdown
-  per attempt). See [DATABASE.md](DATABASE.md).
-- Tests seed `questions`/`tests` via a new `seed_tests` fixture (same
-  ASGITransport-doesn't-run-lifespan reason as Phase 3's `seed_content`);
-  these two collections aren't cleared between tests (shared reference
-  content), but `test_attempts` is.
+- Added `learner_skills` (compound unique index on `user_id`+`category`+
+  `concept`, plus a `user_id` index). No new collections for `mistakes` or a
+  unified activity log — both are computed views over existing collections
+  (`learner_skills` and the union of `learning_activities`+`test_attempts`,
+  respectively), not separately stored. See [DATABASE.md](DATABASE.md).
+- Tests clean `learner_skills` between tests (per-test state, unlike the
+  shared reference content collections).
 
 ## AI
 
@@ -81,14 +84,14 @@ Phase 4 — Test Engine (complete)
 
 ## Testing
 
-- Backend: pytest, 48 tests passing (health, config, auth, profile,
-  activities, test engine).
-- Frontend: Vitest + React Testing Library, 21 tests passing.
+- Backend: pytest, 59 tests passing (health, config, auth, profile,
+  activities, test engine, learner model/progress).
+- Frontend: Vitest + React Testing Library, 27 tests passing.
 - E2E (Playwright or similar): not yet set up — planned for a later phase.
 
 ## CI/CD
 
-- Unchanged from Phase 1–3. Backend tests still run against a `mongo:7`
+- Unchanged from Phase 1–4. Backend tests still run against a `mongo:7`
   service container in CI.
 
 ## Known Issues
@@ -98,46 +101,65 @@ Phase 4 — Test Engine (complete)
 ## Technical Debt
 
 - Carried over: `POST /api/auth/logout` protected no-op; no rate limiting on
-  auth/onboarding; only N5 content exists (12 vocab words, 8 grammar
-  points → 20 questions across 3 tests); no level picker in the UI yet.
-- Tests are seeded system-side, not user-authored — there's no
-  test-creation UI. Acceptable for now (matches "start with vocabulary,
-  grammar, mixed tests" in the master spec); an authoring flow isn't
-  currently planned as a named phase.
-- `test_attempts.answers[].concept` is stored but nothing yet *reads* it
-  in aggregate — that's explicitly Phase 5's job (learner model / skill
-  mastery), not implied to be missing here.
+  auth/onboarding; only N5 content exists; no level picker in the practice UI.
+- Kanji/reading/listening/speaking/conversation always report
+  `has_data: false` in `/api/progress` — there's genuinely no content or
+  activity type feeding them yet (kanji/reading/listening arrive with
+  Phase 13's JLPT expansion; speaking/conversation with Phases 8–9). This is
+  the intended, honest state, not a bug to fix now.
+- Self-assessed flashcard reviews (`known: true/false`) are pooled into the
+  same skill signal as server-verified quiz/test answers with no confidence
+  weighting — a deliberate MVP simplification (see Important Decisions),
+  not something masked as fully-verified data.
+- `docs/ARCHITECTURE.md`'s frontend structure list doesn't yet mention a
+  `stores/` entry for anything beyond auth — profile/progress/test state all
+  live in TanStack Query caches by design (see Phase 2's decision to not
+  duplicate server state into Zustand); worth a doc pass in a later phase if
+  this becomes confusing to new contributors.
 
 ## Important Decisions
 
 - The git repository root is `jap-jap/` nested one level inside the
   `self-project/jap-jap/` folder on disk (pre-existing `git init` + GitHub
   remote `geoff023/jap-jap` were preserved rather than re-initialized).
-- Test Engine content (`questions`, `tests`) is derived from Phase 3's
-  vocabulary/grammar seed data rather than authored a second time — one
-  source of truth for N5 content. Question distractors are chosen by a
-  fixed index-rotation scheme (not random), so seeded content — and which
-  options appear per question — is stable and reproducible across restarts
-  and test runs, unlike Phase 3's per-request random quiz distractors
-  (a deliberate difference: quiz content there is regenerated fresh on every
-  request, test content here must stay fixed since a `test_attempt`
-  references specific `question_id`s that must keep meaning the same thing).
-- `questions` are standalone/reusable, referenced by `tests.question_ids`
-  rather than embedded per-test — this is what makes the "mixed" test
-  possible without duplicating vocabulary/grammar questions into a third copy.
-- Test scoring, like Phase 3's quiz, is entirely server-side: the client
-  never receives `correct_answer` before submitting, and submission
-  recomputes correctness from the stored question rather than trusting
-  anything the client claims about its own answer.
-- `test_attempts` is deliberately its own collection rather than reusing
-  `learning_activities` — a test attempt carries a richer, fixed shape (full
-  per-question answer breakdown for the result page) that the lighter
-  Phase 3 activity log was never meant to hold.
-- An attempt lookup by a non-owning user returns `404`, matching the
-  established pattern (Phase 2/3 also return 404 rather than 403 for
-  "doesn't exist for you") so the endpoint never leaks whether an id exists.
+- `learner_skills` is the *only* new collection this phase. "Mistakes" and
+  "activity history" are explicitly **not** separate stored collections —
+  a mistake is just a skill record with `incorrect_count > 0`, and a unified
+  activity history is a client-side merge-and-sort of two collections that
+  already exist for their own reasons (Phase 3's `learning_activities`,
+  Phase 4's `test_attempts`). Avoids duplicating state that would need to
+  stay in sync with the sources of truth.
+- Category mastery is a **pooled** accuracy rate (total correct ÷ total
+  attempts across all concepts in the category), not an average of each
+  concept's individual mastery — so a concept practiced 20 times counts
+  proportionally more than one practiced once, which matches what "how good
+  are you at vocabulary overall" should mean.
+- Estimated JLPT readiness reuses the same pooled vocabulary+grammar
+  accuracy as "overall Japanese" — an intentionally simple, disclosed
+  approximation (there is only N5 content to measure against regardless of
+  a learner's actual `jlpt_target`), gated behind both a set goal and a
+  minimum attempt count (5) so a single lucky/unlucky answer can't produce a
+  swingy-looking "readiness" number. The UI always labels this "Estimated"
+  and states it is not an official JLPT prediction, per the master spec.
+- Flashcard skill-recording required a small Phase 3 change:
+  `complete_flashcards` previously only counted `known` booleans from
+  client-submitted item ids without ever fetching the underlying content;
+  it now fetches reviewed items to learn their `concept` before recording a
+  skill result. This was a necessary, narrowly-scoped fix to let flashcards
+  feed the learner model at all — not scope creep, since "connect activity
+  results to learner skills" needs every activity type to carry a concept.
+- A skill update is attributed to the *question's* own category for test
+  attempts (not the test's `category`, which can be `"mixed"`) — a `"mixed"`
+  skill category would be meaningless to aggregate against the master
+  spec's fixed category list.
+- `has_data` flags exist on every progress/readiness field specifically so
+  the frontend never has to infer "no data" from a suspicious-looking `0`.
+  Never fabricate scores, per the master spec — an absent measurement and a
+  measured zero must render differently.
 
 ## Next Phase
 
-Phase 5 — Learner Model + Progress (skill mastery, progress dashboard,
-mistakes, activity history, estimated JLPT readiness — never fabricated)
+Phase 6 — Gemini AI Tutor (AIService → GeminiService abstraction; grammar,
+vocabulary, and mistake explanations; structured Gemini responses validated
+with Pydantic; Gemini mocked in all automated tests; no real API key in the
+repository or CI)

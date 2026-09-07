@@ -380,6 +380,65 @@ enforced — an attempt belonging to a different user returns `404`, not
 Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if the
 attempt doesn't exist or belongs to someone else.
 
+### `GET /api/activities/history`
+
+Requires `Authorization: Bearer <token>`. Lists the current user's Phase 3
+activities (quiz/flashcard completions), newest first.
+
+```json
+[{ "category": "vocabulary", "activity_type": "flashcards", "level": "N5", "correct_count": null, "known_count": 8, "total": 12, "xp_earned": 40, "created_at": "..." }]
+```
+
+For a *combined* history including test attempts too, the frontend fetches
+this and `GET /api/tests/attempts` and merges them client-side by date —
+there is no single unified backend endpoint for that.
+
+### `GET /api/progress`
+
+Requires `Authorization: Bearer <token>`. Returns the learner model:
+overall mastery, per-category skill mastery, and estimated JLPT readiness.
+Every score comes with a `has_data` flag — when `false`, the frontend must
+show "Not enough data yet." rather than treating `mastery: null` as zero.
+
+```json
+{
+  "overall": { "mastery": 0.82, "has_data": true },
+  "skills": [
+    { "category": "vocabulary", "mastery": 0.9, "concepts_tracked": 10, "has_data": true },
+    { "category": "grammar", "mastery": 0.6, "concepts_tracked": 5, "has_data": true },
+    { "category": "kanji", "mastery": null, "concepts_tracked": 0, "has_data": false },
+    { "category": "reading", "mastery": null, "concepts_tracked": 0, "has_data": false },
+    { "category": "listening", "mastery": null, "concepts_tracked": 0, "has_data": false },
+    { "category": "speaking", "mastery": null, "concepts_tracked": 0, "has_data": false },
+    { "category": "conversation", "mastery": null, "concepts_tracked": 0, "has_data": false }
+  ],
+  "estimated_jlpt_readiness": { "jlpt_target": "N5", "score": 0.82, "has_data": true }
+}
+```
+
+`estimated_jlpt_readiness.has_data` requires **both** a `jlpt_target` set on
+the profile **and** at least 5 combined vocabulary+grammar attempts — below
+that, `has_data` is `false` regardless of `jlpt_target`. The score itself is
+a simple pooled accuracy rate across all tracked activity, explicitly an
+estimate — never described as an official JLPT prediction.
+
+`kanji`/`reading`/`listening`/`speaking`/`conversation` always report
+`has_data: false` today — there's no content or activity type feeding them
+yet (later phases).
+
+### `GET /api/mistakes`
+
+Requires `Authorization: Bearer <token>`. Lists concepts the learner has
+gotten wrong at least once, most-missed first.
+
+```json
+[{ "category": "grammar", "concept": "particle-ni", "occurrences": 7, "mastery": 0.42, "last_seen": "..." }]
+```
+
+`occurrences` counts only *incorrect* answers for that concept (not total
+attempts); `mastery` is that concept's overall correct/(correct+incorrect)
+rate, same formula as `/api/progress`.
+
 ## Planned Routes (added phase by phase)
 
 These are not implemented yet — listed here to reflect the intended surface
@@ -387,8 +446,7 @@ as the project grows:
 
 | Route | Phase |
 |---|---|
-| `/api/kanji` | 3/13 |
-| `/api/progress`, `/api/mistakes` | 5 |
+| `/api/kanji` | 13 |
 | `/api/ai` | 6–7 |
 | `/api/conversation` | 8 |
 | `/api/speech` | 9 |

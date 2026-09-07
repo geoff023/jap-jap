@@ -1,6 +1,7 @@
 import type { JlptLevel } from '../types/profile'
 import type {
   ActivityCategory,
+  ActivityHistoryEntry,
   FlashcardCompletePayload,
   FlashcardCompleteResponse,
   GrammarConcept,
@@ -65,4 +66,8 @@ export function completeFlashcards(
   payload: FlashcardCompletePayload,
 ): Promise<FlashcardCompleteResponse> {
   return postJson('/api/activities/flashcards/complete', token, payload)
+}
+
+export function fetchActivityHistory(token: string): Promise<ActivityHistoryEntry[]> {
+  return getJson('/api/activities/history', token)
 }

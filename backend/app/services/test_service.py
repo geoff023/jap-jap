@@ -3,6 +3,7 @@ from typing import Any
 
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.question_repository import QuestionRepository
+from app.repositories.skill_repository import LearnerSkillRepository
 from app.repositories.test_attempt_repository import TestAttemptRepository
 from app.repositories.test_repository import TestRepository
 from app.schemas.test import AnswerSubmission
@@ -29,11 +30,13 @@ class TestService:
         questions: QuestionRepository,
         attempts: TestAttemptRepository,
         profiles: LearnerProfileRepository,
+        skills: LearnerSkillRepository,
     ):
         self._tests = tests
         self._questions = questions
         self._attempts = attempts
         self._profiles = profiles
+        self._skills = skills
 
     async def list_tests(self) -> list[dict[str, Any]]:
         return await self._tests.list_all()
@@ -62,6 +65,7 @@ class TestService:
         questions = await self._questions.find_by_ids([a.question_id for a in answers])
         questions_by_id = {str(q["_id"]): q for q in questions}
 
+        now = datetime.now(timezone.utc)
         results = []
         score = 0
         for answer in answers:
@@ -80,6 +84,12 @@ class TestService:
                     "explanation": question["explanation"],
                 }
             )
+            # A question's own category (vocabulary/grammar), not the
+            # test's — a "mixed" test has no single category to attribute
+            # the skill update to.
+            await self._skills.record_result(
+                user_id, question["category"], question["concept"], is_correct, now
+            )
 
         total = len(results)
         xp_earned = score * XP_PER_CORRECT
@@ -95,7 +105,7 @@ class TestService:
                 "score": score,
                 "total": total,
                 "xp_earned": xp_earned,
-                "completed_at": datetime.now(timezone.utc),
+                "completed_at": now,
             }
         )
 

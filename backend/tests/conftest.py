@@ -27,6 +27,7 @@ async def reset_database():
     await db["learner_profiles"].delete_many({})
     await db["learning_activities"].delete_many({})
     await db["test_attempts"].delete_many({})
+    await db["learner_skills"].delete_many({})
     # vocabulary/grammar_concepts/questions/tests are shared reference
     # content, not per-test state — left in place so `seed_content` only
     # inserts once per test session instead of reseeding before every test.

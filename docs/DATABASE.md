@@ -137,14 +137,37 @@ model to connect results to skills.
 | `xp_earned` | int | |
 | `completed_at` | datetime (UTC) | |
 
+### `learner_skills` (Phase 5)
+
+Managed by `app/repositories/skill_repository.py`. One document per
+`(user_id, category, concept)` — the single source of truth for skill
+mastery, mistakes, and estimated JLPT readiness, all computed by aggregating
+these documents. Updated by `ActivityService` (Phase 3 quiz/flashcards) and
+`TestService` (Phase 4 attempts) as a side effect of scoring — there's no
+separate "sync" step. A concept is the same skill (e.g. 食べる, or
+`particle-ha`) whichever activity type it was practiced through.
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | |
+| `user_id` | string | |
+| `category` | string | `vocabulary` \| `grammar` (only categories with a data source so far) |
+| `concept` | string | vocabulary `term` or grammar `key` |
+| `correct_count` | int | absent (not zero) until the first correct answer — `$inc` creates it |
+| `incorrect_count` | int | absent until the first wrong answer |
+| `last_seen` | datetime (UTC) | updated on every result, right or wrong |
+| `created_at` | datetime (UTC) | |
+
+Mastery for a concept is always computed on read as
+`correct_count / (correct_count + incorrect_count)`, never stored — so it's
+never stale and never fabricated ahead of having both counts.
+
 ## Planned Collections
 
 These will be introduced as the relevant phase implements them:
 
 ```
-learner_skills
 kanji
-mistakes
 conversation_sessions
 conversation_messages
 speaking_attempts
@@ -166,12 +189,12 @@ learning_activities.user_id — implemented, see ActivityRepository.ensure_index
 questions.category, questions.level — implemented, see QuestionRepository.ensure_indexes()
 tests.category, tests.level — implemented, see TestRepository.ensure_indexes()
 test_attempts.user_id — implemented, see TestAttemptRepository.ensure_indexes()
+learner_skills.(user_id, category, concept) (unique), learner_skills.user_id — implemented, see LearnerSkillRepository.ensure_indexes()
 ```
 
 ### Planned (minimum)
 
 ```
-mistakes.userId
 progress_events.userId
 conversation_sessions.userId
 ```

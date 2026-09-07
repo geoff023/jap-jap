@@ -1,11 +1,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
+import ActivityHistoryPage from './pages/ActivityHistoryPage'
 import DashboardPage from './pages/DashboardPage'
 import FlashcardsPage from './pages/FlashcardsPage'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
+import MistakesPage from './pages/MistakesPage'
 import OnboardingPage from './pages/OnboardingPage'
+import ProgressPage from './pages/ProgressPage'
 import QuizPage from './pages/QuizPage'
 import RegisterPage from './pages/RegisterPage'
 import TestHistoryPage from './pages/TestHistoryPage'
@@ -84,6 +87,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <TestTakingPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/progress"
+            element={
+              <ProtectedRoute>
+                <ProgressPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mistakes"
+            element={
+              <ProtectedRoute>
+                <MistakesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/activity-history"
+            element={
+              <ProtectedRoute>
+                <ActivityHistoryPage />
               </ProtectedRoute>
             }
           />

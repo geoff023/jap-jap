@@ -11,6 +11,7 @@ from app.repositories.activity_repository import ActivityRepository
 from app.repositories.grammar_repository import GrammarRepository
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.question_repository import QuestionRepository
+from app.repositories.skill_repository import LearnerSkillRepository
 from app.repositories.test_attempt_repository import TestAttemptRepository
 from app.repositories.test_repository import TestRepository
 from app.repositories.user_repository import UserRepository
@@ -59,6 +60,12 @@ def get_test_attempt_repository(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> TestAttemptRepository:
     return TestAttemptRepository(db)
+
+
+def get_skill_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> LearnerSkillRepository:
+    return LearnerSkillRepository(db)
 
 
 async def get_current_user(

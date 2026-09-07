@@ -5,19 +5,23 @@ from app.api.deps import (
     get_current_user,
     get_grammar_repository,
     get_profile_repository,
+    get_skill_repository,
     get_vocabulary_repository,
 )
 from app.repositories.activity_repository import ActivityRepository
 from app.repositories.grammar_repository import GrammarRepository
 from app.repositories.profile_repository import LearnerProfileRepository
+from app.repositories.skill_repository import LearnerSkillRepository
 from app.repositories.vocabulary_repository import VocabularyRepository
 from app.schemas.activity import (
     ActivityCategory,
+    ActivityHistoryEntry,
     FlashcardCompleteRequest,
     FlashcardCompleteResponse,
     QuizResponse,
     QuizSubmitRequest,
     QuizSubmitResponse,
+    activity_to_history_entry,
 )
 from app.schemas.profile import JLPTLevel
 from app.services.activity_service import (
@@ -34,8 +38,9 @@ def _service(
     grammar: GrammarRepository = Depends(get_grammar_repository),
     activities: ActivityRepository = Depends(get_activity_repository),
     profiles: LearnerProfileRepository = Depends(get_profile_repository),
+    skills: LearnerSkillRepository = Depends(get_skill_repository),
 ) -> ActivityService:
-    return ActivityService(vocabulary, grammar, activities, profiles)
+    return ActivityService(vocabulary, grammar, activities, profiles, skills)
 
 
 @router.get("/quiz", response_model=QuizResponse)
@@ -85,3 +90,12 @@ async def complete_flashcards(
             status_code=status.HTTP_404_NOT_FOUND, detail="Onboarding not completed yet"
         ) from exc
     return FlashcardCompleteResponse(**result)
+
+
+@router.get("/history", response_model=list[ActivityHistoryEntry])
+async def get_activity_history(
+    current_user: dict = Depends(get_current_user),
+    activities: ActivityRepository = Depends(get_activity_repository),
+) -> list[ActivityHistoryEntry]:
+    docs = await activities.list_by_user(str(current_user["_id"]))
+    return [activity_to_history_entry(d) for d in docs]

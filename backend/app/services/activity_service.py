@@ -5,6 +5,7 @@ from typing import Any
 from app.repositories.activity_repository import ActivityRepository
 from app.repositories.grammar_repository import GrammarRepository
 from app.repositories.profile_repository import LearnerProfileRepository
+from app.repositories.skill_repository import LearnerSkillRepository
 from app.repositories.vocabulary_repository import VocabularyRepository
 from app.schemas.activity import (
     ActivityCategory,
@@ -41,6 +42,15 @@ _ACTIVITY_TYPE_FOR_QUIZ = {
     ActivityCategory.GRAMMAR: "sentence_completion",
 }
 
+# The field that identifies *what concept* an item tests — same field
+# test_seed_data.py uses to derive Question.concept, so a vocabulary word or
+# grammar point is tracked as the same skill whether it was practiced via a
+# Phase 3 quiz/flashcard or a Phase 4 test.
+_CONCEPT_FIELDS = {
+    ActivityCategory.VOCABULARY: "term",
+    ActivityCategory.GRAMMAR: "key",
+}
+
 
 class ActivityService:
     def __init__(
@@ -49,11 +59,13 @@ class ActivityService:
         grammar: GrammarRepository,
         activities: ActivityRepository,
         profiles: LearnerProfileRepository,
+        skills: LearnerSkillRepository,
     ):
         self._vocabulary = vocabulary
         self._grammar = grammar
         self._activities = activities
         self._profiles = profiles
+        self._skills = skills
 
     def _content_repo(self, category: ActivityCategory) -> VocabularyRepository | GrammarRepository:
         return self._vocabulary if category == ActivityCategory.VOCABULARY else self._grammar
@@ -94,9 +106,11 @@ class ActivityService:
             raise ProfileRequiredError(user_id)
 
         _, answer_field = _QUIZ_FIELDS[category]
+        concept_field = _CONCEPT_FIELDS[category]
         items = await self._content_repo(category).find_by_ids([a.item_id for a in answers])
         items_by_id = {str(item["_id"]): item for item in items}
 
+        now = datetime.now(timezone.utc)
         results = []
         correct_count = 0
         for answer in answers:
@@ -113,6 +127,9 @@ class ActivityService:
                     "correct_answer": correct_answer,
                 }
             )
+            await self._skills.record_result(
+                user_id, category.value, item[concept_field], is_correct, now
+            )
 
         total = len(results)
         xp_earned = correct_count * QUIZ_XP_PER_CORRECT
@@ -125,7 +142,7 @@ class ActivityService:
                 "correct_count": correct_count,
                 "total": total,
                 "xp_earned": xp_earned,
-                "created_at": datetime.now(timezone.utc),
+                "created_at": now,
             }
         )
         updated_profile = await self._profiles.increment_xp(user_id, xp_earned)
@@ -150,7 +167,25 @@ class ActivityService:
         if profile is None:
             raise ProfileRequiredError(user_id)
 
-        known_count = sum(1 for r in reviewed if r.known)
+        concept_field = _CONCEPT_FIELDS[category]
+        items = await self._content_repo(category).find_by_ids([r.item_id for r in reviewed])
+        items_by_id = {str(item["_id"]): item for item in items}
+
+        now = datetime.now(timezone.utc)
+        known_count = 0
+        for review in reviewed:
+            known_count += int(review.known)
+            item = items_by_id.get(review.item_id)
+            if item is None:
+                continue
+            # Self-assessed, not server-verified — pooled into the same
+            # skill signal as quiz/test answers anyway for MVP simplicity;
+            # see docs/PROJECT_STATE.md for why that's an acceptable
+            # simplification rather than a fabrication.
+            await self._skills.record_result(
+                user_id, category.value, item[concept_field], review.known, now
+            )
+
         total = len(reviewed)
         xp_earned = known_count * FLASHCARD_XP_PER_KNOWN
 
@@ -163,7 +198,7 @@ class ActivityService:
                 "known_count": known_count,
                 "total": total,
                 "xp_earned": xp_earned,
-                "created_at": datetime.now(timezone.utc),
+                "created_at": now,
             }
         )
         updated_profile = await self._profiles.increment_xp(user_id, xp_earned)

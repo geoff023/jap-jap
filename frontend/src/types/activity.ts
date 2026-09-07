@@ -77,3 +77,14 @@ export interface FlashcardCompleteResponse {
   xp_earned: number
   total_xp: number
 }
+
+export interface ActivityHistoryEntry {
+  category: ActivityCategory
+  activity_type: string
+  level: JlptLevel
+  correct_count: number | null
+  known_count: number | null
+  total: number
+  xp_earned: number
+  created_at: string
+}

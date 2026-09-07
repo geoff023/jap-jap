@@ -7,8 +7,10 @@ from app.api.activities import router as activities_router
 from app.api.auth import router as auth_router
 from app.api.grammar import router as grammar_router
 from app.api.health import router as health_router
+from app.api.mistakes import router as mistakes_router
 from app.api.onboarding import router as onboarding_router
 from app.api.profile import router as profile_router
+from app.api.progress import router as progress_router
 from app.api.tests import router as tests_router
 from app.api.users import router as users_router
 from app.api.vocabulary import router as vocabulary_router
@@ -20,6 +22,7 @@ from app.repositories.activity_repository import ActivityRepository
 from app.repositories.grammar_repository import GrammarRepository
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.question_repository import QuestionRepository
+from app.repositories.skill_repository import LearnerSkillRepository
 from app.repositories.test_attempt_repository import TestAttemptRepository
 from app.repositories.test_repository import TestRepository
 from app.repositories.user_repository import UserRepository
@@ -48,6 +51,8 @@ async def lifespan(app: FastAPI):
         await TestRepository(db).ensure_indexes()
         await TestAttemptRepository(db).ensure_indexes()
         await seed_test_engine(db)
+
+        await LearnerSkillRepository(db).ensure_indexes()
     except Exception:
         # MongoDB may be unavailable (e.g. local dev without it running yet);
         # the app should still start, and /api/health reports the DB status.
@@ -75,6 +80,8 @@ app.include_router(vocabulary_router, prefix="/api/vocabulary", tags=["vocabular
 app.include_router(grammar_router, prefix="/api/grammar", tags=["grammar"])
 app.include_router(activities_router, prefix="/api/activities", tags=["activities"])
 app.include_router(tests_router, prefix="/api/tests", tags=["tests"])
+app.include_router(progress_router, prefix="/api/progress", tags=["progress"])
+app.include_router(mistakes_router, prefix="/api/mistakes", tags=["mistakes"])
 
 
 @app.get("/")
