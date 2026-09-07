@@ -28,9 +28,15 @@ async def reset_database():
     await db["learning_activities"].delete_many({})
     await db["test_attempts"].delete_many({})
     await db["learner_skills"].delete_many({})
-    # vocabulary/grammar_concepts/questions/tests are shared reference
-    # content, not per-test state — left in place so `seed_content` only
-    # inserts once per test session instead of reseeding before every test.
+    await db["ai_interactions"].delete_many({})
+    await db["mini_stories"].delete_many({})
+    # AI-generated questions are per-test state, unlike the seeded ones —
+    # only clear the ones this test run could have created.
+    await db["questions"].delete_many({"source": "ai_generated"})
+    # vocabulary/grammar_concepts/questions (seeded)/tests are shared
+    # reference content, not per-test state — left in place so
+    # `seed_content` only inserts once per test session instead of
+    # reseeding before every test.
     close_client()
 
 
@@ -101,3 +107,19 @@ async def seed_tests():
     from app.core.test_seed_data import seed_test_engine
 
     await seed_test_engine(get_database())
+
+
+@pytest_asyncio.fixture
+async def fake_ai_service():
+    """Override the app's real get_ai_service dependency with a fake for the
+    duration of one test — automated tests must never call the real Gemini
+    API. Yields the fake so a test can inspect `.calls` or flip
+    `.should_fail`."""
+    from app.api.deps import get_ai_service
+    from app.main import app
+    from tests.fakes import FakeAIService
+
+    fake = FakeAIService()
+    app.dependency_overrides[get_ai_service] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_ai_service, None)

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as activityApi from '../services/activityApi'
+import * as aiApi from '../services/aiApi'
 import { useAuthStore } from '../stores/authStore'
 import type { QuizResponse } from '../types/activity'
 import QuizPage from './QuizPage'
@@ -69,5 +70,44 @@ describe('QuizPage', () => {
       ],
     })
     expect(await screen.findByText('1 / 2 correct')).toBeInTheDocument()
+  })
+
+  it('asks the AI Tutor to explain an incorrect answer', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(activityApi, 'fetchQuiz').mockResolvedValue(quiz)
+    vi.spyOn(activityApi, 'submitQuiz').mockResolvedValue({
+      correct_count: 1,
+      total: 2,
+      xp_earned: 10,
+      total_xp: 10,
+      results: [
+        { item_id: 'v1', correct: true, correct_answer: 'to eat' },
+        { item_id: 'v2', correct: false, correct_answer: 'to drink' },
+      ],
+    })
+    vi.spyOn(aiApi, 'explainMistake').mockResolvedValue({
+      concept: '飲む',
+      explanation: '飲む means "to drink", not "to see".',
+      tip: 'Remember: 飲む = drink.',
+    })
+
+    renderPage()
+
+    await user.click(await screen.findByRole('radio', { name: 'to eat' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(await screen.findByRole('radio', { name: 'to see' }))
+    await user.click(screen.getByRole('button', { name: 'Finish' }))
+
+    await screen.findByText('1 / 2 correct')
+    await user.click(screen.getByRole('button', { name: '🤖 Ask AI Tutor' }))
+
+    expect(aiApi.explainMistake).toHaveBeenCalledWith(
+      'a-token',
+      'vocabulary',
+      '飲む',
+      'to see',
+      'to drink',
+    )
+    expect(await screen.findByText('飲む means "to drink", not "to see".')).toBeInTheDocument()
   })
 })

@@ -102,6 +102,7 @@ a single test.
 | `options` | string[] | 4 options, correct answer's position varies by question |
 | `correct_answer` | string | never returned by `GET /api/tests/{id}` — only revealed per-answer after `POST .../attempts` |
 | `explanation` | string | shown after answering |
+| `source` | string \| absent | `"ai_generated"` for content from `/api/ai/generate/*` (Phase 7); absent (not `"seed"`) for the original Phase 4 seed data |
 
 ### `tests` (Phase 4)
 
@@ -162,6 +163,47 @@ Mastery for a concept is always computed on read as
 `correct_count / (correct_count + incorrect_count)`, never stored — so it's
 never stale and never fabricated ahead of having both counts.
 
+### `ai_interactions` (Phase 6)
+
+Managed by `app/repositories/ai_interaction_repository.py`. A lightweight
+usage log, not a copy of personal data — see [AI.md](AI.md)'s Privacy
+section. Written only after a successful `/api/ai/explain/*` call; failed
+calls aren't logged.
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | |
+| `user_id` | string | indexed |
+| `interaction_type` | string | `grammar_explanation` \| `vocabulary_explanation` \| `mistake_explanation` (Phase 6); `vocabulary_question_generation` \| `grammar_question_generation` \| `mini_story_generation` (Phase 7) |
+| `concept` | string | the term/concept asked about (or generated) — not the full prompt or Gemini's response |
+| `created_at` | datetime (UTC) | |
+
+### `mini_stories` (Phase 7)
+
+Managed by `app/repositories/mini_story_repository.py`. One document per
+generated story. Unlike `questions`, a story's comprehension questions are
+embedded directly (they're only ever meaningful in the context of their
+own story, not reusable across other content the way a vocabulary/grammar
+question is).
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | |
+| `title` | string | |
+| `level` | string | `JLPTLevel` value |
+| `story` | string | original AI-generated Japanese text, 20–2000 chars |
+| `translation` | string | English translation |
+| `vocab_highlights` | string[] | 1–15 notable words/phrases from the story |
+| `comprehension_questions` | array | each: `prompt`, `options` (4, unique), `correct_answer`, `explanation` — `correct_answer`/`explanation` never returned by `GET`-equivalent responses, only revealed per-answer after submitting |
+| `generated_by_user_id` | string | indexed; who requested it — also the ownership check for submitting answers (a non-owner gets 404, not 403) |
+| `created_at` | datetime (UTC) | |
+
+Note: `questions` (Phase 4) gained a `source` field in Phase 7 —
+`"ai_generated"` for content created via `/api/ai/generate/*`, absent
+(not `"seed"`) for the original Phase 4 seed data. This lets tests (and any
+future cleanup/reporting) distinguish the two without touching existing
+seeded documents.
+
 ## Planned Collections
 
 These will be introduced as the relevant phase implements them:
@@ -175,7 +217,6 @@ progress_events
 achievements
 user_achievements
 recommendations
-ai_interactions
 ```
 
 ## Indexes
@@ -190,6 +231,8 @@ questions.category, questions.level — implemented, see QuestionRepository.ensu
 tests.category, tests.level — implemented, see TestRepository.ensure_indexes()
 test_attempts.user_id — implemented, see TestAttemptRepository.ensure_indexes()
 learner_skills.(user_id, category, concept) (unique), learner_skills.user_id — implemented, see LearnerSkillRepository.ensure_indexes()
+ai_interactions.user_id — implemented, see AIInteractionRepository.ensure_indexes()
+mini_stories.level, mini_stories.generated_by_user_id — implemented, see MiniStoryRepository.ensure_indexes()
 ```
 
 ### Planned (minimum)

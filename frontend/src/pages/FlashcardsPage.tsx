@@ -2,8 +2,15 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { completeFlashcards, fetchGrammar, fetchVocabulary } from '../services/activityApi'
+import { aiUnavailableMessage, explainGrammar, explainVocabulary } from '../services/aiApi'
 import { useAuthStore } from '../stores/authStore'
-import type { ActivityCategory, FlashcardReview, GrammarConcept, VocabularyItem } from '../types/activity'
+import type {
+  ActivityCategory,
+  FlashcardReview,
+  GrammarConcept,
+  VocabularyItem,
+} from '../types/activity'
+import type { GrammarExplanation, VocabularyExplanation } from '../types/ai'
 
 const LEVEL = 'N5'
 
@@ -21,6 +28,11 @@ export default function FlashcardsPage() {
   const [reviewed, setReviewed] = useState<FlashcardReview[]>([])
   const [result, setResult] = useState<{ xpEarned: number; totalXp: number } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [aiExplanation, setAiExplanation] = useState<
+    GrammarExplanation | VocabularyExplanation | null
+  >(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
 
   const deckQuery = useQuery<DeckItem[]>({
     queryKey: ['flashcards', category],
@@ -31,12 +43,34 @@ export default function FlashcardsPage() {
     enabled: Boolean(token),
   })
 
+  function resetAiExplanation() {
+    setAiExplanation(null)
+    setAiError(null)
+  }
+
   function switchCategory(next: ActivityCategory) {
     setCategory(next)
     setIndex(0)
     setRevealed(false)
     setReviewed([])
     setResult(null)
+    resetAiExplanation()
+  }
+
+  async function askAiTutor() {
+    if (!token || !current) return
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      const explanation = isVocabItem(current)
+        ? await explainVocabulary(token, current.term, current.example_sentence ?? undefined)
+        : await explainGrammar(token, current.title, current.example_sentence)
+      setAiExplanation(explanation)
+    } catch (err) {
+      setAiError(aiUnavailableMessage(err) ?? 'Could not reach the AI tutor. Please try again.')
+    } finally {
+      setAiLoading(false)
+    }
   }
 
   async function review(known: boolean) {
@@ -45,6 +79,7 @@ export default function FlashcardsPage() {
     const next = [...reviewed, { item_id: current.id, known }]
     setReviewed(next)
     setRevealed(false)
+    resetAiExplanation()
 
     if (index + 1 < deck.length) {
       setIndex(index + 1)
@@ -147,6 +182,33 @@ export default function FlashcardsPage() {
                   </div>
                 )}
               </>
+            )}
+
+            {revealed && (
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                {!aiExplanation && (
+                  <button
+                    type="button"
+                    onClick={askAiTutor}
+                    disabled={aiLoading}
+                    className="rounded-lg border border-sky-300 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-50 disabled:opacity-60"
+                  >
+                    {aiLoading ? 'Asking AI Tutor…' : '🤖 Ask AI Tutor'}
+                  </button>
+                )}
+                {aiError && <p className="mt-2 text-xs text-rose-500">{aiError}</p>}
+                {aiExplanation && (
+                  <div className="mt-1 rounded-lg bg-sky-50 p-3 text-left text-sm text-sky-900">
+                    <p className="font-semibold">🤖 AI Tutor</p>
+                    <p className="mt-1">{aiExplanation.explanation}</p>
+                    <p className="mt-2 text-xs text-sky-700">
+                      {aiExplanation.example_sentence}
+                      <br />
+                      {aiExplanation.example_translation}
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="mt-6 flex justify-center gap-3">

@@ -439,6 +439,172 @@ gotten wrong at least once, most-missed first.
 attempts); `mastery` is that concept's overall correct/(correct+incorrect)
 rate, same formula as `/api/progress`.
 
+### `POST /api/ai/explain/grammar`
+
+Requires `Authorization: Bearer <token>`. Explains a grammar point via
+Gemini — see [AI.md](AI.md) for the full pipeline.
+
+**Request**
+
+```json
+{ "concept": "particle-ha", "context": "わたしは学生です。" }
+```
+
+`context` is optional (max 500 chars); `concept` is required (1–200 chars).
+
+**Response** (`200 OK`)
+
+```json
+{
+  "concept": "particle-ha",
+  "explanation": "は marks the topic of the sentence...",
+  "example_sentence": "わたしは学生です。",
+  "example_translation": "I am a student."
+}
+```
+
+Errors: `401 Unauthorized` if not authenticated, `422` for an invalid body,
+`503 Service Unavailable` if no `GEMINI_API_KEY` is configured, `502 Bad
+Gateway` if Gemini fails or returns something that doesn't validate.
+
+### `POST /api/ai/explain/vocabulary`
+
+Same shape as grammar, for a word/phrase.
+
+**Request**: `{ "term": "食べる", "context": "..." }` (context optional)
+
+**Response**: `{ "term": "...", "meaning": "...", "explanation": "...", "example_sentence": "...", "example_translation": "..." }`
+
+Same error cases as `/explain/grammar`.
+
+### `POST /api/ai/explain/mistake`
+
+Explains why a specific answer was wrong. Used for mistake review, not
+scoring — scoring is always deterministic backend logic (Phases 3–4), never AI.
+
+**Request**
+
+```json
+{ "category": "grammar", "concept": "particle-ni", "user_answer": "で", "correct_answer": "に" }
+```
+
+**Response**
+
+```json
+{ "concept": "particle-ni", "explanation": "...", "tip": "..." }
+```
+
+Same error cases as the other two `/explain/*` endpoints.
+
+Every successful call to any `/api/ai/explain/*` endpoint is logged to
+`ai_interactions` (`user_id`, `interaction_type`, `concept`, `created_at`
+only — never the full prompt/response). Failed calls are not logged.
+
+### `POST /api/ai/generate/vocabulary-question`
+
+Requires `Authorization: Bearer <token>`. Generates a supplementary
+multiple-choice vocabulary question and stores it (`questions` collection,
+tagged `source: "ai_generated"`) for reuse. No onboarding required to
+generate — only submitting an answer earns XP (below).
+
+**Request**: `{ "level": "N5" }`
+
+**Response** (`200 OK`) — no `correct_answer`, same non-cheating contract as
+Phase 3/4's quiz/test content:
+
+```json
+{ "id": "...", "category": "vocabulary", "level": "N5", "concept": "食べる", "prompt": "...", "options": ["...", "...", "...", "..."] }
+```
+
+Errors: `401 Unauthorized` if not authenticated, `422` for an invalid body,
+`503 Service Unavailable` if no `GEMINI_API_KEY` is configured, `502 Bad
+Gateway` if Gemini fails, returns fewer/duplicate options, or a correct
+answer not present in its own options list.
+
+### `POST /api/ai/generate/grammar-question`
+
+Same shape as vocabulary, for a sentence-completion grammar question
+(`category: "grammar"` in the stored/returned document).
+
+### `POST /api/ai/generated-questions/{question_id}/submit`
+
+Requires `Authorization: Bearer <token>` and a completed onboarding.
+Scores a generated question the same deterministic way as Phase 3/4 content
+— re-checks `selected` against the stored `correct_answer`, never asks
+Gemini whether it's right.
+
+**Request**: `{ "selected": "to eat" }`
+
+**Response** (`200 OK`)
+
+```json
+{ "correct": true, "correct_answer": "to eat", "explanation": "...", "xp_earned": 10, "total_xp": 130 }
+```
+
+10 XP for a correct answer, 0 for incorrect (no partial credit, and no XP
+loss). Feeds the learner model exactly like a quiz answer (Phase 5's
+`learner_skills`, keyed by the question's `category`/`concept`).
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if
+onboarding hasn't been completed yet or the question id is unknown.
+
+### `POST /api/ai/generate/mini-story`
+
+Requires `Authorization: Bearer <token>`. Generates an original short story
+plus 2–5 reading comprehension questions in one Gemini call (cheaper than
+two separate calls, and keeps the questions grounded in the same story) and
+stores it in `mini_stories`.
+
+**Request**: `{ "level": "N5", "topic": "ramen shop" }` (`topic` optional)
+
+**Response** (`200 OK`) — comprehension questions have no `correct_answer`:
+
+```json
+{
+  "id": "...",
+  "title": "...",
+  "level": "N5",
+  "story": "...",
+  "translation": "...",
+  "vocab_highlights": ["...", "..."],
+  "comprehension_questions": [{ "index": 0, "prompt": "...", "options": ["...", "...", "...", "..."] }]
+}
+```
+
+Same error cases as the vocabulary/grammar generation endpoints.
+
+### `POST /api/ai/mini-stories/{story_id}/comprehension/submit`
+
+Requires `Authorization: Bearer <token>`, a completed onboarding, **and**
+ownership of the story (a story belonging to a different user returns
+`404`, not `403`, matching the Phase 4 test-attempt pattern).
+
+**Request**
+
+```json
+{ "answers": [{ "index": 0, "selected": "an apple" }] }
+```
+
+**Response** (`200 OK`)
+
+```json
+{
+  "score": 1,
+  "total": 1,
+  "xp_earned": 10,
+  "total_xp": 140,
+  "results": [{ "index": 0, "selected": "an apple", "correct": true, "correct_answer": "an apple", "explanation": "..." }]
+}
+```
+
+10 XP per correct answer. Also feeds the `reading` category in the learner
+model (`GET /api/progress`) — the first real data source for `reading`,
+which had none before Phase 7.
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if
+onboarding hasn't been completed, the story doesn't exist, or it belongs to
+someone else.
+
 ## Planned Routes (added phase by phase)
 
 These are not implemented yet — listed here to reflect the intended surface
@@ -447,7 +613,6 @@ as the project grows:
 | Route | Phase |
 |---|---|
 | `/api/kanji` | 13 |
-| `/api/ai` | 6–7 |
 | `/api/conversation` | 8 |
 | `/api/speech` | 9 |
 | `/api/recommendations` | 10 |

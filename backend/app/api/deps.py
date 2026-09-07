@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Any
 
 import jwt
@@ -5,10 +6,15 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from app.ai.base import AIService
+from app.ai.gemini_service import GeminiService
+from app.core.config import Settings, get_settings
 from app.core.database import get_database
 from app.core.security import decode_access_token
 from app.repositories.activity_repository import ActivityRepository
+from app.repositories.ai_interaction_repository import AIInteractionRepository
 from app.repositories.grammar_repository import GrammarRepository
+from app.repositories.mini_story_repository import MiniStoryRepository
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.question_repository import QuestionRepository
 from app.repositories.skill_repository import LearnerSkillRepository
@@ -66,6 +72,35 @@ def get_skill_repository(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> LearnerSkillRepository:
     return LearnerSkillRepository(db)
+
+
+def get_ai_interaction_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> AIInteractionRepository:
+    return AIInteractionRepository(db)
+
+
+def get_mini_story_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> MiniStoryRepository:
+    return MiniStoryRepository(db)
+
+
+@lru_cache
+def _build_gemini_service(api_key: str) -> GeminiService:
+    return GeminiService(api_key)
+
+
+def get_ai_service(settings: Settings = Depends(get_settings)) -> AIService:
+    """Raises 503 rather than returning a service when no GEMINI_API_KEY is
+    configured — the app as a whole must still start and run fine without
+    one (see docs/AI.md); only these specific endpoints become unavailable."""
+    if not settings.ai_enabled or settings.gemini_api_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI features are not configured. Set GEMINI_API_KEY to enable them.",
+        )
+    return _build_gemini_service(settings.gemini_api_key)
 
 
 async def get_current_user(

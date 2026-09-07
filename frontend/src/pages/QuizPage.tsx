@@ -2,8 +2,10 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchQuiz, submitQuiz } from '../services/activityApi'
+import { aiUnavailableMessage, explainMistake } from '../services/aiApi'
 import { useAuthStore } from '../stores/authStore'
 import type { ActivityCategory, QuizAnswer, QuizSubmitResponse } from '../types/activity'
+import type { MistakeExplanation } from '../types/ai'
 
 const LEVEL = 'N5'
 
@@ -15,6 +17,9 @@ export default function QuizPage() {
   const [answers, setAnswers] = useState<QuizAnswer[]>([])
   const [result, setResult] = useState<QuizSubmitResponse | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [explanations, setExplanations] = useState<Record<string, MistakeExplanation>>({})
+  const [explaining, setExplaining] = useState<Record<string, boolean>>({})
+  const [explainErrors, setExplainErrors] = useState<Record<string, string>>({})
 
   const quizQuery = useQuery({
     queryKey: ['quiz', category],
@@ -28,6 +33,40 @@ export default function QuizPage() {
     setSelected(null)
     setAnswers([])
     setResult(null)
+    setExplanations({})
+    setExplaining({})
+    setExplainErrors({})
+  }
+
+  async function askAiTutor(itemId: string, correctAnswer: string) {
+    if (!token) return
+    const answer = answers.find((a) => a.item_id === itemId)
+    const question = questions.find((q) => q.item_id === itemId)
+    if (!answer || !question) return
+
+    setExplaining((prev) => ({ ...prev, [itemId]: true }))
+    setExplainErrors((prev) => {
+      const next = { ...prev }
+      delete next[itemId]
+      return next
+    })
+    try {
+      const explanation = await explainMistake(
+        token,
+        category,
+        question.prompt,
+        answer.selected,
+        correctAnswer,
+      )
+      setExplanations((prev) => ({ ...prev, [itemId]: explanation }))
+    } catch (err) {
+      setExplainErrors((prev) => ({
+        ...prev,
+        [itemId]: aiUnavailableMessage(err) ?? 'Could not reach the AI tutor. Please try again.',
+      }))
+    } finally {
+      setExplaining((prev) => ({ ...prev, [itemId]: false }))
+    }
   }
 
   async function next() {
@@ -103,6 +142,27 @@ export default function QuizPage() {
                   }`}
                 >
                   {r.correct ? 'Correct' : `Incorrect — answer: ${r.correct_answer}`}
+
+                  {!r.correct && !explanations[r.item_id] && (
+                    <button
+                      type="button"
+                      onClick={() => askAiTutor(r.item_id, r.correct_answer)}
+                      disabled={explaining[r.item_id]}
+                      className="mt-2 block rounded-lg border border-sky-300 bg-white px-3 py-1 text-xs font-semibold text-sky-700 transition hover:bg-sky-50 disabled:opacity-60"
+                    >
+                      {explaining[r.item_id] ? 'Asking AI Tutor…' : '🤖 Ask AI Tutor'}
+                    </button>
+                  )}
+                  {explainErrors[r.item_id] && (
+                    <p className="mt-1 text-xs text-rose-500">{explainErrors[r.item_id]}</p>
+                  )}
+                  {explanations[r.item_id] && (
+                    <div className="mt-2 rounded-lg bg-sky-50 p-2 text-xs text-sky-900">
+                      <p className="font-semibold">🤖 AI Tutor</p>
+                      <p className="mt-1">{explanations[r.item_id].explanation}</p>
+                      <p className="mt-1 italic">{explanations[r.item_id].tip}</p>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

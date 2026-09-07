@@ -1,6 +1,15 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Resolved relative to this file, not the process's current working
+# directory — pydantic-settings' env_file paths are otherwise CWD-relative,
+# which breaks whenever the app is launched from a directory other than
+# backend/ (e.g. `uvicorn --app-dir backend app.main:app` from the repo
+# root only adds backend/ to sys.path, it doesn't chdir there).
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_REPO_ROOT = _BACKEND_DIR.parent
 
 
 class Settings(BaseSettings):
@@ -23,7 +32,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(
-        env_file=("../.env", ".env"),
+        env_file=(str(_REPO_ROOT / ".env"), str(_BACKEND_DIR / ".env")),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

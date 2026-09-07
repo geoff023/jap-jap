@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as activityApi from '../services/activityApi'
+import * as aiApi from '../services/aiApi'
 import { useAuthStore } from '../stores/authStore'
 import type { VocabularyItem } from '../types/activity'
 import FlashcardsPage from './FlashcardsPage'
@@ -78,5 +79,26 @@ describe('FlashcardsPage', () => {
         { item_id: 'v2', known: false },
       ],
     })
+  })
+
+  it('shows an AI Tutor explanation when asked', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(activityApi, 'fetchVocabulary').mockResolvedValue(deck)
+    vi.spyOn(aiApi, 'explainVocabulary').mockResolvedValue({
+      term: '食べる',
+      meaning: 'to eat',
+      explanation: 'A common ichidan verb.',
+      example_sentence: '朝ごはんを食べます。',
+      example_translation: 'I eat breakfast.',
+    })
+
+    renderPage()
+
+    expect(await screen.findByText('食べる')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show answer' }))
+    await user.click(screen.getByRole('button', { name: '🤖 Ask AI Tutor' }))
+
+    expect(await screen.findByText('A common ichidan verb.')).toBeInTheDocument()
+    expect(aiApi.explainVocabulary).toHaveBeenCalledWith('a-token', '食べる', undefined)
   })
 })

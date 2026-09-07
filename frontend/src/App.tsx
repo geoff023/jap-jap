@@ -2,10 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import ActivityHistoryPage from './pages/ActivityHistoryPage'
+import AIPracticePage from './pages/AIPracticePage'
 import DashboardPage from './pages/DashboardPage'
 import FlashcardsPage from './pages/FlashcardsPage'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
+import MiniStoriesPage from './pages/MiniStoriesPage'
 import MistakesPage from './pages/MistakesPage'
 import OnboardingPage from './pages/OnboardingPage'
 import ProgressPage from './pages/ProgressPage'
@@ -111,6 +113,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <ActivityHistoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ai-practice"
+            element={
+              <ProtectedRoute>
+                <AIPracticePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mini-stories"
+            element={
+              <ProtectedRoute>
+                <MiniStoriesPage />
               </ProtectedRoute>
             }
           />

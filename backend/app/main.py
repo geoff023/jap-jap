@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.activities import router as activities_router
+from app.api.ai import router as ai_router
+from app.api.ai_generation import router as ai_generation_router
 from app.api.auth import router as auth_router
 from app.api.grammar import router as grammar_router
 from app.api.health import router as health_router
@@ -19,7 +21,9 @@ from app.core.database import close_client, get_database
 from app.core.seed_data import GRAMMAR_N5, VOCABULARY_N5
 from app.core.test_seed_data import seed_test_engine
 from app.repositories.activity_repository import ActivityRepository
+from app.repositories.ai_interaction_repository import AIInteractionRepository
 from app.repositories.grammar_repository import GrammarRepository
+from app.repositories.mini_story_repository import MiniStoryRepository
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.question_repository import QuestionRepository
 from app.repositories.skill_repository import LearnerSkillRepository
@@ -53,6 +57,8 @@ async def lifespan(app: FastAPI):
         await seed_test_engine(db)
 
         await LearnerSkillRepository(db).ensure_indexes()
+        await AIInteractionRepository(db).ensure_indexes()
+        await MiniStoryRepository(db).ensure_indexes()
     except Exception:
         # MongoDB may be unavailable (e.g. local dev without it running yet);
         # the app should still start, and /api/health reports the DB status.
@@ -82,6 +88,8 @@ app.include_router(activities_router, prefix="/api/activities", tags=["activitie
 app.include_router(tests_router, prefix="/api/tests", tags=["tests"])
 app.include_router(progress_router, prefix="/api/progress", tags=["progress"])
 app.include_router(mistakes_router, prefix="/api/mistakes", tags=["mistakes"])
+app.include_router(ai_router, prefix="/api/ai", tags=["ai"])
+app.include_router(ai_generation_router, prefix="/api/ai", tags=["ai-generation"])
 
 
 @app.get("/")

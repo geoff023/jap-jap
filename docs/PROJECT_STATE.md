@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 5 — Learner Model + Progress (complete)
+Phase 7 — AI Content Generation (complete)
 
 ## Completed
 
@@ -12,71 +12,89 @@ Phase 5 — Learner Model + Progress (complete)
 - Phase 3: Core Learning — vocabulary, grammar, flashcards, multiple choice, sentence completion, XP.
 - Phase 4: Test Engine — test creation, questions, attempts, scoring, result page, history.
 - Phase 5: Learner Model + Progress — skill mastery, progress dashboard, mistakes, activity history, estimated JLPT readiness.
+- Phase 6: Gemini AI Tutor — AIService → GeminiService, grammar/vocabulary/mistake explanations, structured + Pydantic-validated, mocked in all tests.
+- Phase 7: AI Content Generation — supplementary AI-generated vocabulary/grammar questions, mini stories, comprehension questions; all validated and stored.
 
 ## Frontend
 
 - React + TypeScript + Vite (`frontend/`), Tailwind CSS v4, React Router,
   TanStack Query, Zustand (auth only).
-- New pages: `ProgressPage` (overall mastery, per-skill breakdown across all
-  7 tracked categories, estimated JLPT readiness with an explicit
-  "not an official JLPT prediction" disclaimer), `MistakesPage` (recurring
-  wrong-answer concepts, most-missed first), `ActivityHistoryPage` (merges
-  Phase 3 `learning_activities` and Phase 4 `test_attempts` into one
-  newest-first timeline client-side — no unified backend endpoint for this).
-- Every mastery/readiness figure renders "Not enough data yet." whenever the
-  API's `has_data` flag is false — never a bare `0%`, which would misreport
-  "measured zero" instead of "no measurement."
-- Dashboard's practice grid grew to 4 tiles (Flashcards, Quiz, Tests,
-  Progress) with a responsive 2-col/4-col grid.
-- `src/services/progressApi.ts`, `src/types/progress.ts`; added
-  `fetchActivityHistory` to `activityApi.ts`.
-- Test tooling: Vitest + RTL, 27 tests total (added `ProgressPage.test.tsx`,
-  `MistakesPage.test.tsx`, `ActivityHistoryPage.test.tsx`).
+- `src/services/aiGenerationApi.ts`, `src/types/aiGeneration.ts` — client
+  for the five new `/api/ai/generate/*` and `/api/ai/generated-questions/*`
+  and `/api/ai/mini-stories/*` endpoints.
+- New pages: `AIPracticePage` (`/ai-practice` — pick category + any JLPT
+  level N5–N1, generate a single question on demand, answer it, get scored;
+  unlike other practice pages this one lets the learner pick *any* level
+  since generation doesn't depend on pre-seeded content) and
+  `MiniStoriesPage` (`/mini-stories` — pick a level and optional topic,
+  generate a story with reading comprehension questions answered one form,
+  submitted together).
+- Dashboard's practice grid grew to 6 tiles (3×2): Flashcards, Quiz, Tests,
+  Progress, AI Practice, Mini Stories.
+- Test tooling: Vitest + RTL, 34 tests total (added
+  `AIPracticePage.test.tsx`, `MiniStoriesPage.test.tsx`).
 
 ## Backend
 
-- `app/repositories/skill_repository.py` — `learner_skills`, one document
-  per `(user_id, category, concept)`; `record_result()` increments
-  `correct_count`/`incorrect_count` via `$inc` (which creates the field from
-  the increment if absent — no `$setOnInsert` conflict) and updates
-  `last_seen`; `list_mistakes()` filters to `incorrect_count > 0`, sorted
-  descending.
-- `app/services/learner_model_service.py` — `get_progress()` aggregates
-  `learner_skills` into per-category and overall pooled accuracy
-  (`sum(correct) / sum(correct+incorrect)`, not an unweighted average of
-  per-concept masteries), each with a `has_data` flag; estimated JLPT
-  readiness requires **both** a `jlpt_target` on the profile **and**
-  ≥5 combined vocabulary+grammar attempts before reporting a score.
-- **Enhanced Phase 3/4 services to feed the skill model**: `ActivityService`
-  now takes a `LearnerSkillRepository` and calls `record_result()` per
-  answer/reviewed item in both `submit_quiz` and `complete_flashcards`
-  (flashcards needed a new lookup of reviewed items' concepts — it
-  previously only counted booleans); `TestService` does the same in
-  `submit_attempt`, using each *question's own* category (not the test's,
-  since a "mixed" test has no single category to attribute a skill update to).
-- `app/api/progress.py` (`GET /api/progress`), `app/api/mistakes.py`
-  (`GET /api/mistakes`), and a new `GET /api/activities/history` (exposing
-  `ActivityRepository.list_by_user`, which existed since Phase 3 but was
-  never routed).
-- Test tooling: pytest, 59 tests total (added `test_progress.py`: no-data
-  baseline, mastery after a quiz, categories-without-a-source always report
-  no data, readiness gating on both jlpt_target and attempt count, mistake
-  occurrence/mastery math, and a cross-feature test proving flashcards *and*
-  test attempts both feed the same skill model as quizzes).
+- `app/schemas/ai_generation.py` — `GeneratedQuestion` and
+  `GeneratedMiniStory` (with nested `ComprehensionQuestion`s), each with a
+  `model_validator` enforcing the *business* rules Pydantic's field types
+  alone can't (`_validate_multiple_choice`: exactly 4 unique options, the
+  correct answer among them) — this is the "business validation" step in
+  the Gemini → structured output → Pydantic validation → business
+  validation → database pipeline from [AI.md](AI.md), not skippable
+  shape-checking.
+- `app/ai/base.py` / `gemini_service.py` — three new `AIService` methods:
+  `generate_vocabulary_question`, `generate_grammar_question`,
+  `generate_mini_story` (the last generates the story *and* its
+  comprehension questions in one Gemini call — cheaper, and keeps questions
+  grounded in the actual story text).
+- `app/services/content_generation_service.py::ContentGenerationService` —
+  orchestrates generation → storage → `ai_interactions` logging, and
+  scoring (`submit_generated_question`, `submit_comprehension`) using the
+  same deterministic re-check-against-stored-content pattern as Phases 3–4
+  (Gemini is never asked to grade an answer).
+- `app/api/ai_generation.py` — `POST /api/ai/generate/{vocabulary,grammar}-question`,
+  `POST /api/ai/generate/mini-story`,
+  `POST /api/ai/generated-questions/{id}/submit`,
+  `POST /api/ai/mini-stories/{id}/comprehension/submit`. Generation itself
+  needs no onboarding (browsing/generating content is free, like
+  `GET /api/vocabulary`); only submitting an answer (which earns XP)
+  requires it, and only submitting a mini-story's comprehension additionally
+  enforces ownership (404, not 403, for someone else's story — same pattern
+  as Phase 4's test attempts).
+- Generated vocabulary/grammar questions are stored in the *existing*
+  `questions` collection (Phase 4), tagged `source: "ai_generated"` — no new
+  collection needed, and they're structurally reusable by a future Test if
+  a later phase wants that. Mini stories get their own `mini_stories`
+  collection since their comprehension questions are story-specific, not
+  reusable content.
+- **Comprehension answers now feed the `reading` category in the learner
+  model** — the first real data source for `reading` since Phase 5
+  introduced the category with permanently `has_data: false`.
+- Test tooling: pytest, 93 tests total (added `test_ai_generation.py`:
+  generation stores content and hides the answer, both submit endpoints
+  score correctly and award/withhold XP correctly, ownership enforcement on
+  mini-story submission, `reading`/`vocabulary` skill feed-through, and the
+  same 502/503 patterns as Phase 6; extended `test_gemini_service.py` with
+  business-validation-rejection cases: too few options, duplicate options,
+  correct answer missing from options).
 
 ## Database
 
-- Added `learner_skills` (compound unique index on `user_id`+`category`+
-  `concept`, plus a `user_id` index). No new collections for `mistakes` or a
-  unified activity log — both are computed views over existing collections
-  (`learner_skills` and the union of `learning_activities`+`test_attempts`,
-  respectively), not separately stored. See [DATABASE.md](DATABASE.md).
-- Tests clean `learner_skills` between tests (per-test state, unlike the
-  shared reference content collections).
+- Added `mini_stories` (indexed on `level`, `generated_by_user_id`).
+  `questions` (Phase 4) gained an optional `source` field
+  (`"ai_generated"` vs absent-for-seeded) — no schema migration needed since
+  MongoDB is schemaless and existing seeded documents are simply treated as
+  "not AI-generated" by omission. See [DATABASE.md](DATABASE.md).
+- Tests clean `mini_stories` fully and `questions` filtered to
+  `source: "ai_generated"` between tests (seeded questions stay, matching
+  the existing shared-reference-content pattern).
 
 ## AI
 
-- Not implemented. Unchanged — see [AI.md](AI.md).
+- Extended — see [AI.md](AI.md) for the full Phase 7 pipeline, storage
+  design, and privacy notes.
 
 ## Speech
 
@@ -84,15 +102,22 @@ Phase 5 — Learner Model + Progress (complete)
 
 ## Testing
 
-- Backend: pytest, 59 tests passing (health, config, auth, profile,
-  activities, test engine, learner model/progress).
-- Frontend: Vitest + React Testing Library, 27 tests passing.
+- Backend: pytest, 93 tests passing (health, config, auth, profile,
+  activities, test engine, learner model/progress, AI tutor, AI content
+  generation).
+- Frontend: Vitest + React Testing Library, 34 tests passing.
 - E2E (Playwright or similar): not yet set up — planned for a later phase.
+- **Manually verified against the real Gemini API** (same non-functional
+  local key as Phase 6): confirmed `/api/ai/generate/vocabulary-question`
+  genuinely reaches Gemini (visible in network requests as a real HTTP
+  round-trip, not an instant mock response) and that a provider failure
+  renders as the same friendly retry message pattern established in Phase 6.
 
 ## CI/CD
 
-- Unchanged from Phase 1–4. Backend tests still run against a `mongo:7`
-  service container in CI.
+- Unchanged from Phase 1–6. Backend tests still run against a `mongo:7`
+  service container in CI. No `GEMINI_API_KEY` is set or required in CI —
+  every AI-dependent test uses `FakeAIService`.
 
 ## Known Issues
 
@@ -101,65 +126,53 @@ Phase 5 — Learner Model + Progress (complete)
 ## Technical Debt
 
 - Carried over: `POST /api/auth/logout` protected no-op; no rate limiting on
-  auth/onboarding; only N5 content exists; no level picker in the practice UI.
-- Kanji/reading/listening/speaking/conversation always report
-  `has_data: false` in `/api/progress` — there's genuinely no content or
-  activity type feeding them yet (kanji/reading/listening arrive with
-  Phase 13's JLPT expansion; speaking/conversation with Phases 8–9). This is
-  the intended, honest state, not a bug to fix now.
-- Self-assessed flashcard reviews (`known: true/false`) are pooled into the
-  same skill signal as server-verified quiz/test answers with no confidence
-  weighting — a deliberate MVP simplification (see Important Decisions),
-  not something masked as fully-verified data.
-- `docs/ARCHITECTURE.md`'s frontend structure list doesn't yet mention a
-  `stores/` entry for anything beyond auth — profile/progress/test state all
-  live in TanStack Query caches by design (see Phase 2's decision to not
-  duplicate server state into Zustand); worth a doc pass in a later phase if
-  this becomes confusing to new contributors.
+  auth/onboarding/AI endpoints (generation endpoints are the most
+  cost-bearing calls in the app now — two Gemini calls per learner action
+  in the worst case, generate then submit — rate limiting these specifically
+  should be a priority before any public deployment); only N5 seed content
+  exists (AI generation partially offsets this by supporting any JLPT level
+  on demand); no level picker on the *seeded*-content practice pages.
+- AI-generated questions are stored indefinitely with no expiry/cleanup —
+  fine at current scale, worth revisiting if generation volume grows.
+- `mini_stories` documents are never listed back to their creator (no
+  "my past stories" page) — each generation is a one-off experience, by
+  design for this phase; revisit if that turns out to feel incomplete.
 
 ## Important Decisions
 
 - The git repository root is `jap-jap/` nested one level inside the
   `self-project/jap-jap/` folder on disk (pre-existing `git init` + GitHub
   remote `geoff023/jap-jap` were preserved rather than re-initialized).
-- `learner_skills` is the *only* new collection this phase. "Mistakes" and
-  "activity history" are explicitly **not** separate stored collections —
-  a mistake is just a skill record with `incorrect_count > 0`, and a unified
-  activity history is a client-side merge-and-sort of two collections that
-  already exist for their own reasons (Phase 3's `learning_activities`,
-  Phase 4's `test_attempts`). Avoids duplicating state that would need to
-  stay in sync with the sources of truth.
-- Category mastery is a **pooled** accuracy rate (total correct ÷ total
-  attempts across all concepts in the category), not an average of each
-  concept's individual mastery — so a concept practiced 20 times counts
-  proportionally more than one practiced once, which matches what "how good
-  are you at vocabulary overall" should mean.
-- Estimated JLPT readiness reuses the same pooled vocabulary+grammar
-  accuracy as "overall Japanese" — an intentionally simple, disclosed
-  approximation (there is only N5 content to measure against regardless of
-  a learner's actual `jlpt_target`), gated behind both a set goal and a
-  minimum attempt count (5) so a single lucky/unlucky answer can't produce a
-  swingy-looking "readiness" number. The UI always labels this "Estimated"
-  and states it is not an official JLPT prediction, per the master spec.
-- Flashcard skill-recording required a small Phase 3 change:
-  `complete_flashcards` previously only counted `known` booleans from
-  client-submitted item ids without ever fetching the underlying content;
-  it now fetches reviewed items to learn their `concept` before recording a
-  skill result. This was a necessary, narrowly-scoped fix to let flashcards
-  feed the learner model at all — not scope creep, since "connect activity
-  results to learner skills" needs every activity type to carry a concept.
-- A skill update is attributed to the *question's* own category for test
-  attempts (not the test's `category`, which can be `"mixed"`) — a `"mixed"`
-  skill category would be meaningless to aggregate against the master
-  spec's fixed category list.
-- `has_data` flags exist on every progress/readiness field specifically so
-  the frontend never has to infer "no data" from a suspicious-looking `0`.
-  Never fabricate scores, per the master spec — an absent measurement and a
-  measured zero must render differently.
+- Generated vocabulary/grammar questions reuse Phase 4's `questions`
+  collection rather than getting their own — they're structurally identical
+  content (prompt/options/correct_answer/explanation/concept/category/level),
+  and a `source` tag is enough to distinguish provenance without a schema
+  fork. Mini stories get a dedicated collection because their comprehension
+  questions are embedded and story-specific, not a reusable unit the way a
+  vocabulary/grammar question is.
+- `_validate_multiple_choice` lives as a `model_validator` on the Pydantic
+  schemas themselves (`app/schemas/ai_generation.py`), not as separate
+  "business validation" code called after Pydantic — for this app, the
+  business rules (4 unique options, correct answer present) are simple and
+  static enough that keeping them co-located with the schema is clearer
+  than a second validation pass, while still being conceptually the
+  pipeline's distinct "business validation" step.
+- Comprehension question answers write to `learner_skills` with
+  `category: "reading"` and `concept: <story title>` — a deliberate choice
+  to give `reading` its first real data source now rather than waiting for
+  a dedicated reading-comprehension phase, since Phase 7's mini stories are
+  functionally exactly that.
+- Standalone generated questions (unlike quiz/test answers) award 0 XP for
+  a wrong answer rather than some smaller deterministic penalty — matches
+  the quiz/test XP model (Phase 3/4) exactly: correct answers earn XP,
+  incorrect answers earn none, never negative.
+- Generation endpoints (`/generate/*`) don't require completed onboarding;
+  only the endpoints that award XP (`*/submit`) do — matches the existing
+  "browsing is free, earning XP requires a profile" pattern from Phases 3–4
+  (e.g. `GET /api/vocabulary` vs `POST /api/activities/quiz/submit`).
 
 ## Next Phase
 
-Phase 6 — Gemini AI Tutor (AIService → GeminiService abstraction; grammar,
-vocabulary, and mistake explanations; structured Gemini responses validated
-with Pydantic; Gemini mocked in all automated tests; no real API key in the
-repository or CI)
+Phase 8 — Text Conversation (conversation sessions, characters, scenarios,
+Gemini responses, conversation history; starting with ramen shop,
+convenience store, train station scenarios)
