@@ -28,6 +28,9 @@ class ConversationSessionRepository:
         )
         return await cursor.to_list(length=limit)
 
+    async def count_by_user(self, user_id: str) -> int:
+        return await self._collection.count_documents({"user_id": user_id})
+
     async def touch(self, session_id: str, when: datetime, increment: int) -> None:
         await self._collection.update_one(
             {"_id": ObjectId(session_id)},

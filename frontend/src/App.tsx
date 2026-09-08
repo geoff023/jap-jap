@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
+import AchievementsPage from './pages/AchievementsPage'
 import ActivityHistoryPage from './pages/ActivityHistoryPage'
 import AIPracticePage from './pages/AIPracticePage'
 import ConversationChatPage from './pages/ConversationChatPage'
@@ -174,6 +175,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <SpeakingHistoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/achievements"
+            element={
+              <ProtectedRoute>
+                <AchievementsPage />
               </ProtectedRoute>
             }
           />

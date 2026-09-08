@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.achievements import router as achievements_router
 from app.api.activities import router as activities_router
 from app.api.ai import router as ai_router
 from app.api.ai_generation import router as ai_generation_router
@@ -19,10 +20,15 @@ from app.api.speech import router as speech_router
 from app.api.tests import router as tests_router
 from app.api.users import router as users_router
 from app.api.vocabulary import router as vocabulary_router
+from app.core.achievement_seed_data import ACHIEVEMENTS
 from app.core.config import get_settings
 from app.core.database import close_client, get_database
 from app.core.seed_data import GRAMMAR_N5, VOCABULARY_N5
 from app.core.test_seed_data import seed_test_engine
+from app.repositories.achievement_repository import (
+    AchievementRepository,
+    UserAchievementRepository,
+)
 from app.repositories.activity_repository import ActivityRepository
 from app.repositories.ai_interaction_repository import AIInteractionRepository
 from app.repositories.conversation_repository import (
@@ -70,6 +76,11 @@ async def lifespan(app: FastAPI):
         await ConversationSessionRepository(db).ensure_indexes()
         await ConversationMessageRepository(db).ensure_indexes()
         await SpeakingAttemptRepository(db).ensure_indexes()
+
+        achievement_repo = AchievementRepository(db)
+        await achievement_repo.ensure_indexes()
+        await achievement_repo.seed_if_empty(ACHIEVEMENTS)
+        await UserAchievementRepository(db).ensure_indexes()
     except Exception:
         # MongoDB may be unavailable (e.g. local dev without it running yet);
         # the app should still start, and /api/health reports the DB status.
@@ -104,6 +115,7 @@ app.include_router(ai_generation_router, prefix="/api/ai", tags=["ai-generation"
 app.include_router(conversation_router, prefix="/api/conversation", tags=["conversation"])
 app.include_router(speech_router, prefix="/api/speech", tags=["speech"])
 app.include_router(recommendations_router, prefix="/api/recommendations", tags=["recommendations"])
+app.include_router(achievements_router, prefix="/api/achievements", tags=["achievements"])
 
 
 @app.get("/")

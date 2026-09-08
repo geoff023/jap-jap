@@ -11,6 +11,10 @@ from app.ai.gemini_service import GeminiService
 from app.core.config import Settings, get_settings
 from app.core.database import get_database
 from app.core.security import decode_access_token
+from app.repositories.achievement_repository import (
+    AchievementRepository,
+    UserAchievementRepository,
+)
 from app.repositories.activity_repository import ActivityRepository
 from app.repositories.ai_interaction_repository import AIInteractionRepository
 from app.repositories.conversation_repository import (
@@ -109,6 +113,18 @@ def get_speaking_attempt_repository(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> SpeakingAttemptRepository:
     return SpeakingAttemptRepository(db)
+
+
+def get_achievement_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> AchievementRepository:
+    return AchievementRepository(db)
+
+
+def get_user_achievement_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> UserAchievementRepository:
+    return UserAchievementRepository(db)
 
 
 @lru_cache

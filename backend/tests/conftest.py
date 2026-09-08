@@ -33,6 +33,7 @@ async def reset_database():
     await db["conversation_sessions"].delete_many({})
     await db["conversation_messages"].delete_many({})
     await db["speaking_attempts"].delete_many({})
+    await db["user_achievements"].delete_many({})
     # AI-generated questions are per-test state, unlike the seeded ones —
     # only clear the ones this test run could have created.
     await db["questions"].delete_many({"source": "ai_generated"})
@@ -110,6 +111,17 @@ async def seed_tests():
     from app.core.test_seed_data import seed_test_engine
 
     await seed_test_engine(get_database())
+
+
+@pytest_asyncio.fixture
+async def seed_achievements():
+    """Seed the achievement catalog if not already present (same
+    ASGITransport-doesn't-run-lifespan caveat as `seed_content` above)."""
+    from app.core.achievement_seed_data import ACHIEVEMENTS
+    from app.core.database import get_database
+    from app.repositories.achievement_repository import AchievementRepository
+
+    await AchievementRepository(get_database()).seed_if_empty(ACHIEVEMENTS)
 
 
 @pytest_asyncio.fixture

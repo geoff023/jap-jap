@@ -286,6 +286,44 @@ ordering lesson as Phase 8's `conversation_messages` (see above): a failed
 transcription leaves no trace, rather than a dangling attempt with no
 transcript.
 
+### `achievements` (Phase 11)
+
+Managed by `app/repositories/achievement_repository.py::AchievementRepository`.
+The achievement catalog — seeded once at startup from
+`app/core/achievement_seed_data.py::ACHIEVEMENTS`, the same
+seed-from-code-into-Mongo pattern as Phase 3's vocabulary/grammar (not the
+purely-in-code approach Phase 8/9 used for characters/scenarios/speaking
+prompts — see [PROJECT_STATE.md](PROJECT_STATE.md)'s Phase 11 Important
+Decisions for why). Read-only from the application's perspective after
+seeding.
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | |
+| `key` | string | unique index; stable identifier referenced by `user_achievements.achievement_key` |
+| `name` | string | |
+| `description` | string | the unlock criteria, in plain language |
+| `emoji` | string | |
+| `_seed_order` | int | explicit display order (insertion order into `insert_many` isn't a guaranteed sort) |
+
+### `user_achievements` (Phase 11)
+
+Managed by `app/repositories/achievement_repository.py::UserAchievementRepository`.
+One document per unlocked achievement per user — never created for a
+locked achievement, and never re-written once created (`unlock()` is an
+idempotent `$setOnInsert` upsert), so `unlocked_at` is a genuine "first
+detected" timestamp that stays stable across repeated checks.
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | |
+| `user_id` | string | indexed |
+| `achievement_key` | string | references `achievements.key` |
+| `unlocked_at` | datetime (UTC) | set once, never updated |
+
+Unique index on `(user_id, achievement_key)` — the mechanism that makes
+`unlock()`'s upsert idempotent.
+
 ## Planned Collections
 
 These will be introduced as the relevant phase implements them:
@@ -293,8 +331,6 @@ These will be introduced as the relevant phase implements them:
 ```
 kanji
 progress_events
-achievements
-user_achievements
 ```
 
 Note: `recommendations` was on this list before Phase 10, but the phase
@@ -303,6 +339,8 @@ deliberately didn't introduce it — recommendations are computed fresh from
 "never store what can be computed live" principle used for mastery/progress
 throughout the learner model since Phase 5. See
 [PROJECT_STATE.md](PROJECT_STATE.md)'s Phase 10 Important Decisions.
+`achievements`/`user_achievements` were also on this list and *were*
+introduced, in Phase 11.
 
 ## Indexes
 
@@ -321,6 +359,8 @@ mini_stories.level, mini_stories.generated_by_user_id — implemented, see MiniS
 conversation_sessions.user_id — implemented, see ConversationSessionRepository.ensure_indexes()
 conversation_messages.session_id — implemented, see ConversationMessageRepository.ensure_indexes()
 speaking_attempts.user_id — implemented, see SpeakingAttemptRepository.ensure_indexes()
+achievements.key (unique) — implemented, see AchievementRepository.ensure_indexes()
+user_achievements.(user_id, achievement_key) (unique), user_achievements.user_id — implemented, see UserAchievementRepository.ensure_indexes()
 ```
 
 ### Planned (minimum)

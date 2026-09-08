@@ -119,7 +119,11 @@ should practice next is exactly the "deterministic ranking" this section
 reserves for backend logic (see
 [ARCHITECTURE.md](ARCHITECTURE.md)'s Product Model); `RecommendationService`
 reads `learner_skills`/`conversation_sessions` and applies fixed
-thresholds, nothing AI-generated about it.
+thresholds, nothing AI-generated about it. **Phase 11's achievement engine
+is the same story** — `AchievementService` checks fixed criteria (XP
+thresholds, activity counts, category mastery) against existing data with
+no Gemini call anywhere in the path; gamification milestones are scoring
+logic, not content Gemini could plausibly generate anyway.
 
 ## Graceful Degradation
 

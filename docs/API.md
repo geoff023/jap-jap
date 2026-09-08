@@ -810,6 +810,38 @@ having no practice route yet), sorted weakest-mastery-first, untried
 nudges after. Never empty — the `"challenge"` fallback guarantees at least
 one entry.
 
+### `GET /api/achievements`
+
+Requires `Authorization: Bearer <token>`. Returns the full achievement
+catalog (all 10 badges), each with the current user's earned/locked status
+— deterministic, no AI involved (see [AI.md](AI.md)). No onboarding
+required (a profile-less learner just sees everything locked).
+
+```json
+[
+  {
+    "key": "first_steps",
+    "name": "First Steps",
+    "description": "Complete your first quiz, flashcard set, or test.",
+    "emoji": "🎯",
+    "earned": true,
+    "unlocked_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "key": "century_club",
+    "name": "Century Club",
+    "description": "Earn 100 XP.",
+    "emoji": "💯",
+    "earned": false,
+    "unlocked_at": null
+  }
+]
+```
+
+Newly-met achievements are unlocked (persisted) the moment this endpoint
+detects them; already-unlocked ones keep their original `unlocked_at` on
+every subsequent call — checking is idempotent, never re-timestamps.
+
 ## Planned Routes (added phase by phase)
 
 These are not implemented yet — listed here to reflect the intended surface

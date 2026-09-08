@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 10 — Adaptive Recommendations (complete)
+Phase 11 — Achievements (complete)
 
 ## Completed
 
@@ -17,6 +17,7 @@ Phase 10 — Adaptive Recommendations (complete)
 - Phase 8: Text Conversation — roleplay conversation sessions with AI characters across 3 scenarios (ramen shop, convenience store, train station), full history threading for scenario consistency, conversation history view.
 - Phase 9: Speech-to-Text — `SpeechToTextService` abstraction (`GeminiSTTProvider` implementation), pronunciation practice against 9 curated target phrases (N5–N1), browser microphone recording, similarity-based scoring, first real data source for the `speaking` learner-model category.
 - Phase 10: Adaptive Recommendations — deterministic "what to practice next" engine reading the learner model, surfaced as a "Recommended for you" panel on the dashboard; closes the `Learning → Practice → Assessment → Learner Model → Weakness Detection → Adaptive Recommendation` loop from [ARCHITECTURE.md](ARCHITECTURE.md).
+- Phase 11: Achievements — a 10-badge gamification catalog seeded into MongoDB (unlike Phase 8/9's in-code content), deterministic milestone detection across XP/activity/mastery/category-breadth, idempotent unlock-on-read with a stable `unlocked_at`, dedicated Achievements page.
 
 ## Frontend
 
@@ -84,6 +85,20 @@ Phase 10 — Adaptive Recommendations (complete)
 - Test tooling: Vitest + RTL, 53 tests total (added two `DashboardPage`
   cases: the panel renders a recommendation with a working action link,
   and it renders nothing when there's nothing to recommend).
+
+### Phase 11 additions
+
+- `src/services/achievementsApi.ts`, `src/types/achievements.ts` — client
+  for `GET /api/achievements`.
+- New page: `AchievementsPage` (`/achievements` — a grid of all 10
+  badges, locked ones grayed out, unlocked ones highlighted with their
+  unlock date). Unlike recommendations, achievements get their own page —
+  a badge collection is something a learner browses deliberately, not a
+  landing-moment nudge.
+- Dashboard's practice grid grew to 9 tiles: added Achievements (🏅).
+- Test tooling: Vitest + RTL, 54 tests total (added
+  `AchievementsPage.test.tsx`: unlocked count, per-badge rendering,
+  locked vs. unlocked distinction).
 
 ## Backend
 
@@ -241,6 +256,45 @@ Phase 10 — Adaptive Recommendations (complete)
   once a session exists, and the challenge fallback when every category
   looks solid).
 
+### Phase 11 additions
+
+- `app/core/achievement_seed_data.py::ACHIEVEMENTS` — the 10-badge catalog
+  (key/name/description/emoji), seeded into the `achievements` collection
+  at startup the same way Phase 3's `VOCABULARY_N5`/`GRAMMAR_N5` are —
+  unlike Phase 8/9's characters/scenarios/speaking prompts, this content
+  is *listed* as a catalog (not referenced by key inside an AI prompt), so
+  it follows the vocabulary/grammar seeding precedent instead.
+- `app/repositories/achievement_repository.py` —
+  `AchievementRepository` (the read-only, seeded catalog) and
+  `UserAchievementRepository` (per-user unlock records; `unlock()` is an
+  idempotent `$setOnInsert` upsert on `(user_id, achievement_key)`, so an
+  already-unlocked achievement's `unlocked_at` never shifts on a later
+  recheck).
+- `app/services/achievement_service.py::AchievementService` — entirely
+  deterministic, no Gemini call (same rule as Phase 10's
+  `RecommendationService`). Gathers XP (profile), activity/test/
+  conversation/speaking counts (new `count_by_user` methods added to
+  `ActivityRepository`, `TestAttemptRepository`,
+  `ConversationSessionRepository`, `SpeakingAttemptRepository`), and
+  per-category mastery (`learner_skills`) — then evaluates all 10
+  criteria and unlocks (persists) any newly-met one at that moment, with a
+  stable timestamp.
+- `app/api/achievements.py` — `GET /api/achievements`. No onboarding
+  required (a profile-less user just sees everything locked, matching the
+  `/api/progress`/`/api/recommendations` pattern).
+- The 10 achievements: `first_steps` (first quiz/flashcard/test),
+  `century_club`/`high_scorer`/`xp_master` (100/500/1000 XP),
+  `chatterbox` (first conversation), `speaker` (first speaking attempt),
+  `bookworm` (first reading comprehension), `well_rounded` (tried all 5
+  practiceable categories), `perfectionist` (≥90% mastery in a category
+  with ≥5 attempts), `test_taker` (5 completed tests).
+- Test tooling: pytest, 137 tests total (added `test_achievements.py`:
+  full-catalog-locked for a new learner, `first_steps`/XP-milestone/
+  `chatterbox`/`well_rounded`/`perfectionist`/`test_taker` unlock
+  conditions (including the too-few-attempts edge case for
+  `perfectionist`), and `unlocked_at` staying stable across repeated
+  requests).
+
 ## Database
 
 - Added `mini_stories` (indexed on `level`, `generated_by_user_id`).
@@ -256,6 +310,11 @@ Phase 10 — Adaptive Recommendations (complete)
   fully between runs. See [DATABASE.md](DATABASE.md).
 - Added `speaking_attempts` (indexed on `user_id`). Tests clean it fully
   between runs. See [DATABASE.md](DATABASE.md).
+- Added `achievements` (the seeded catalog, indexed unique on `key` — not
+  cleared between tests, matching the vocabulary/grammar shared-reference-
+  content pattern) and `user_achievements` (per-user unlocks, indexed
+  unique on `(user_id, achievement_key)` — cleared between tests). See
+  [DATABASE.md](DATABASE.md).
 
 ## AI
 
@@ -271,10 +330,10 @@ Phase 10 — Adaptive Recommendations (complete)
 
 ## Testing
 
-- Backend: pytest, 127 tests passing (health, config, auth, profile,
+- Backend: pytest, 137 tests passing (health, config, auth, profile,
   activities, test engine, learner model/progress, AI tutor, AI content
-  generation, conversation, speech, recommendations).
-- Frontend: Vitest + React Testing Library, 53 tests passing.
+  generation, conversation, speech, recommendations, achievements).
+- Frontend: Vitest + React Testing Library, 54 tests passing.
 - E2E (Playwright or similar): not yet set up — planned for a later phase.
 - **Manually verified against the real Gemini API** (same non-functional
   local key as Phases 6–7): registered a user, completed onboarding,
@@ -313,6 +372,15 @@ Phase 10 — Adaptive Recommendations (complete)
   ≥ 70% threshold), while grammar/reading/speaking remained. This
   confirms the full loop closes correctly against a real backend and real
   learner-model data, not just fixtures.
+- **Phase 11 manually verified against real cross-phase data**: logged in
+  as the same account used throughout Phases 8–10 (one completed quiz at
+  80% mastery, one conversation session, nothing else), opened
+  `/achievements`, and confirmed exactly 2/10 unlocked — `first_steps`
+  (from the quiz) and `chatterbox` (from the conversation) — both with a
+  real unlock date, every other badge correctly grayed out. This is
+  genuine cross-phase verification: the achievement state reflects real
+  actions taken during Phase 8 and Phase 10's manual testing sessions, not
+  fixtures set up for this phase alone.
 
 ## CI/CD
 
@@ -381,8 +449,23 @@ Phase 10 — Adaptive Recommendations (complete)
   ignored it 3 times" tracking) — every request recomputes fresh from
   current data. Fine for an MVP; would matter if recommendation *ranking*
   itself needed to improve from engagement signal later.
-
-## Important Decisions
+- No achievement-unlock notification/toast — a newly-unlocked badge is
+  only visible the next time the learner opens `/achievements` (or the
+  dashboard, if a future iteration surfaces a summary there), same
+  lazy-discovery tradeoff as recommendations. There's no real-time
+  push/toast system in the app yet to hook a "you just unlocked X!"
+  moment into.
+- Achievement criteria are hardcoded in `achievement_service.py`, not
+  data-driven from the `achievements` collection's documents (the seeded
+  catalog only carries display fields — key/name/description/emoji, no
+  machine-readable criteria). Fine at 10 achievements; would need a small
+  criteria DSL if the catalog grows large enough that hardcoding every
+  check becomes unwieldy.
+- `well_rounded` and `perfectionist` are the only achievements that
+  reference *category* mastery rather than a flat count — if Phase 10's
+  `RecommendationService` category list changes (e.g. kanji/listening gain
+  practice routes), `AchievementService`'s category set should be
+  revisited alongside it for consistency.
 
 - The git repository root is `jap-jap/` nested one level inside the
   `self-project/jap-jap/` folder on disk (pre-existing `git init` + GitHub
@@ -498,9 +581,53 @@ Phase 10 — Adaptive Recommendations (complete)
   page — "what should I practice next" is a landing-moment decision, not a
   feature a learner navigates *to*; ProgressPage remains the place for
   mastery detail, Dashboard is where action happens.
+- The achievement catalog is seeded into MongoDB (`achievements`
+  collection), unlike Phase 8/9's characters/scenarios/speaking prompts
+  which stayed purely in-code. The distinguishing factor: those are
+  referenced by key *inside* AI prompt construction (personality strings,
+  target phrases) and never listed as a standalone catalog, whereas
+  achievements are exactly a catalog — a list of things to browse — which
+  matches how Phase 3 already handles vocabulary/grammar (author in code,
+  seed into Mongo, query from there). Same underlying content-authoring
+  approach, different collection-vs-in-code call based on how the content
+  is actually *used*, not a new rule.
+- `UserAchievementRepository.unlock()` is an idempotent upsert
+  (`$setOnInsert` on `(user_id, achievement_key)`), so `AchievementService`
+  can safely call it on *every* met criterion on *every* request without
+  ever double-unlocking or shifting `unlocked_at` forward — this is what
+  makes "lazy unlock-on-read" (checking criteria fresh each request rather
+  than hooking into every XP-earning service's write path) safe to do
+  without a dedicated event system. Verified live: `unlocked_at` for
+  `chatterbox` was identical across two consecutive `GET /api/achievements`
+  calls in the same test.
+- Achievement unlocking is computed lazily on read (whenever a learner
+  visits `/achievements`) rather than event-driven (checked immediately
+  after every quiz/test/conversation/speaking action). The event-driven
+  approach would need threading an `AchievementService` dependency into
+  five existing services (`ActivityService`, `TestService`,
+  `ContentGenerationService`, `ConversationService`, `SpeakingService`) —
+  broad and invasive for a first pass. Lazy-on-read costs only a slightly
+  "late" `unlocked_at` timestamp (whenever the learner next checks, not
+  the exact moment of completion) in exchange for zero changes to any
+  existing write path — the same "compute derived state on read" choice
+  made for Phase 10's recommendations.
+- `well_rounded` and `perfectionist` reuse the exact category-mastery
+  aggregation Phase 10's `RecommendationService` already computes
+  (`learner_skills` grouped by category, correct/(correct+incorrect)) —
+  duplicated in `achievement_service.py` rather than extracted into a
+  shared helper, since the two services need it in slightly different
+  shapes (recommendations need per-category `has_data`/mastery/attempts
+  as a list; achievements need a single "does *any* category clear this
+  bar" boolean) and the computation itself is a few lines, not worth an
+  abstraction yet.
 
 ## Next Phase
 
-Phase 11 — the next unbuilt phase from the master spec (not yet
-determined at time of writing; check with the user or the original master
-prompt for exact scope before starting).
+Not yet determined. The master prompt's Phase 11 spec fell out of context
+during this session, so Phase 11 (Achievements) was built by inferring
+scope from docs/DATABASE.md's already-planned `achievements`/
+`user_achievements` collections, per explicit user direction — not from
+verbatim master-prompt text. The original spec's actual Phase 11 (if
+different from Achievements) and the rest of the phase list beyond this
+point are unknown from here; paste the master prompt's next section, or
+describe the next phase's scope directly, before continuing.
