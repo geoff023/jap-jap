@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 from app.schemas.ai import GrammarExplanation, MistakeExplanation, VocabularyExplanation
 from app.schemas.ai_generation import GeneratedMiniStory, GeneratedQuestion
+from app.schemas.conversation import ConversationReply
 
 
 class AIServiceError(Exception):
@@ -48,3 +49,22 @@ class AIService(ABC):
         """Generate a short story with reading comprehension questions, both
         in one call — cheaper than generating the story and its questions
         separately, and keeps the questions grounded in the same story."""
+
+    @abstractmethod
+    async def continue_conversation(
+        self,
+        character_name: str,
+        character_personality: str,
+        scenario_title: str,
+        scenario_setting: str,
+        level: str,
+        history: list[dict[str, str]],
+        user_message: str,
+    ) -> ConversationReply:
+        """Generate the next in-character reply for a roleplay conversation.
+
+        `history` (a list of {"role": "user" | "character", "content": str}
+        in order) is threaded into every call — Gemini's own API calls are
+        stateless, so staying in character and consistent with the scene
+        across many turns depends entirely on the caller reconstructing
+        context here, not on any session state Gemini itself keeps."""

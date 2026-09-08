@@ -605,6 +605,100 @@ Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if
 onboarding hasn't been completed, the story doesn't exist, or it belongs to
 someone else.
 
+### `GET /api/conversation/scenarios`
+
+Requires `Authorization: Bearer <token>`. Lists the available roleplay
+scenarios and each one's assigned character — no onboarding required
+(browsing is free, same pattern as `GET /api/vocabulary`).
+
+```json
+[
+  {
+    "key": "ramen_shop",
+    "title": "Ramen Shop",
+    "emoji": "🍜",
+    "description": "You've just sat down at the counter of a small ramen shop.",
+    "character": { "key": "momo", "name": "Momo", "emoji": "🐱", "specialty": "casual conversation" }
+  }
+]
+```
+
+### `POST /api/conversation/sessions`
+
+Requires `Authorization: Bearer <token>` and a completed onboarding.
+Starts a new conversation session and returns it with its static opening
+line already in `messages` — no Gemini call yet (the opening line is
+curated, not generated; see [AI.md](AI.md)).
+
+**Request**: `{ "scenario": "ramen_shop", "level": "N5" }`
+
+**Response** (`200 OK`)
+
+```json
+{
+  "id": "...",
+  "scenario": "ramen_shop",
+  "character": { "key": "momo", "name": "Momo", "emoji": "🐱", "specialty": "casual conversation" },
+  "level": "N5",
+  "started_at": "...",
+  "messages": [{ "role": "character", "content": "いらっしゃいませ！何にしますか？", "translation": "Welcome! What would you like to order?", "created_at": "..." }]
+}
+```
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if
+onboarding hasn't been completed yet, `422` for an invalid body.
+
+### `GET /api/conversation/sessions`
+
+Requires `Authorization: Bearer <token>`. Lists the current user's
+conversation sessions, newest-activity-first — no onboarding required to
+browse past conversations.
+
+```json
+[{ "id": "...", "scenario": "ramen_shop", "character_name": "Momo", "character_emoji": "🐱", "level": "N5", "started_at": "...", "last_message_at": "...", "message_count": 3 }]
+```
+
+### `GET /api/conversation/sessions/{session_id}`
+
+Requires `Authorization: Bearer <token>`. Returns one session with its full
+message history. Ownership enforced — a session belonging to a different
+user returns `404`, not `403`, matching the Phase 4 test-attempt pattern.
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if the
+session doesn't exist or belongs to someone else.
+
+### `POST /api/conversation/sessions/{session_id}/messages`
+
+Requires `Authorization: Bearer <token>`, a completed onboarding, and
+ownership of the session. Sends the learner's message, gets the character's
+in-character Gemini reply (with the full conversation history replayed into
+the prompt — see [AI.md](AI.md)), and awards XP. The learner's message is
+only persisted once the character's reply succeeds — a failed Gemini call
+leaves the conversation exactly as it was, so a retry doesn't confuse the
+character with an unanswered turn in its history.
+
+**Request**: `{ "content": "ラーメンをください。" }`
+
+**Response** (`200 OK`)
+
+```json
+{
+  "user_message": { "role": "user", "content": "ラーメンをください。", "translation": null, "created_at": "..." },
+  "character_message": { "role": "character", "content": "はい、少々お待ちください。", "translation": "Sure, please wait a moment.", "created_at": "..." },
+  "xp_earned": 3,
+  "total_xp": 143
+}
+```
+
+3 XP per message sent (lower than quiz/test XP since there's no
+correct/incorrect answer to verify — see [AI.md](AI.md)).
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if
+onboarding hasn't been completed, the session doesn't exist, or it belongs
+to someone else, `422` for an invalid body, `503 Service Unavailable` if no
+`GEMINI_API_KEY` is configured, `502 Bad Gateway` if Gemini fails or
+returns something that doesn't validate.
+
 ## Planned Routes (added phase by phase)
 
 These are not implemented yet — listed here to reflect the intended surface
@@ -613,7 +707,6 @@ as the project grows:
 | Route | Phase |
 |---|---|
 | `/api/kanji` | 13 |
-| `/api/conversation` | 8 |
 | `/api/speech` | 9 |
 | `/api/recommendations` | 10 |
 

@@ -1,11 +1,12 @@
 # AI
 
-**Status: implemented (Phases 6–7).** Grammar/vocabulary/mistake
-explanations (Phase 6) and supplementary content generation — vocabulary
+**Status: implemented (Phases 6–8).** Grammar/vocabulary/mistake
+explanations (Phase 6), supplementary content generation — vocabulary
 questions, grammar questions, mini stories with reading comprehension
-(Phase 7) — via Gemini, behind an `AIService` abstraction. Conversation and
-personalized feedback remain for later phases (8+). Speech-to-Text is still
-unimplemented — see the bottom of this doc.
+(Phase 7) — and character roleplay conversation (Phase 8) via Gemini,
+behind an `AIService` abstraction. Personalized feedback remains for later
+phases (10+). Speech-to-Text is still unimplemented — see the bottom of
+this doc.
 
 ## Provider
 
@@ -29,16 +30,20 @@ Gemini calls out of routes/services scattered across the codebase and makes
 the provider swappable (a second implementation would just be another
 `AIService` subclass).
 
-`AIService` currently defines six methods: `explain_grammar`,
-`explain_vocabulary`, `explain_mistake` (Phase 6), and
+`AIService` currently defines seven methods: `explain_grammar`,
+`explain_vocabulary`, `explain_mistake` (Phase 6);
 `generate_vocabulary_question`, `generate_grammar_question`,
 `generate_mini_story` (Phase 7, in `app/schemas/ai_generation.py`'s
-`GeneratedQuestion`/`GeneratedMiniStory` return types).
+`GeneratedQuestion`/`GeneratedMiniStory` return types); and
+`continue_conversation` (Phase 8, returning `ConversationReply` from
+`app/schemas/conversation.py`).
 `app/services/content_generation_service.py::ContentGenerationService`
 orchestrates the Phase 7 generation methods: call `AIService` → persist the
 already-validated result → log the interaction, keeping that
 storage/logging concern out of `GeminiService` itself (which only knows
-about talking to Gemini).
+about talking to Gemini). `app/services/conversation_service.py::ConversationService`
+plays the analogous role for Phase 8: reconstruct history → call
+`continue_conversation` → persist both turns → award XP.
 
 ## Data Flow
 
@@ -79,8 +84,12 @@ whole response is rejected as an `AIServiceError` before anything is stored.
 **Used for (Phase 7):** supplementary content generation — vocabulary
 questions, grammar questions, mini stories with reading comprehension
 questions (all generated on demand, not pre-seeded).
-**Used for (later phases):** conversation, personalized natural-language
-feedback, semantic analysis.
+**Used for (Phase 8):** in-character roleplay replies for conversation
+practice — each reply is generated fresh per turn, grounded in the
+character's persona, the scenario, the learner's JLPT level, and the full
+conversation history so far.
+**Used for (later phases):** personalized natural-language feedback,
+semantic analysis.
 
 **Not used for:** XP, scoring, progress arithmetic, authentication,
 database operations, or deterministic ranking — those stay in backend
@@ -92,7 +101,12 @@ never asked whether an answer is "correct." This applies equally to Phase
 scored the exact same deterministic way as seeded content (see
 `ContentGenerationService.submit_generated_question` /
 `submit_comprehension`) — Gemini is only ever asked to *create* content, never
-to grade a learner's response to it.
+to grade a learner's response to it. Phase 8's conversation is open-ended
+by nature (there's no "correct" reply to a chat message), so it isn't
+scored at all — XP is a flat per-message amount, not a correctness-based
+one, and conversation turns are never written to `learner_skills` (would
+require fabricating a mastery number with no real basis — see
+[DATABASE.md](DATABASE.md)).
 
 ## Graceful Degradation
 
@@ -104,9 +118,39 @@ constructing a `GeminiService` — only the `/api/ai/explain/*` and
 itself fails or returns something invalid (`AIServiceError`), the route
 returns `502 Bad Gateway` with a generic message — the underlying provider
 error is logged server-side, never leaked to the client. Manually verified
-against the real API in both Phase 6 and Phase 7 with a non-functional
-local key: the request genuinely reaches Gemini, gets rejected, and the
-learner sees a friendly retry message either way.
+against the real API in Phases 6–8 with a non-functional local key: the
+request genuinely reaches Gemini, gets rejected, and the learner sees a
+friendly retry message either way.
+
+## Conversation Consistency (Phase 8)
+
+Each call to `continue_conversation` is a stateless Gemini request — the
+model has no memory of earlier turns unless the caller supplies it. Two
+things keep a character and scenario consistent across a long conversation
+despite that:
+
+1. **Static opening lines.** The first message in every session
+   (`app/core/conversation_data.py`'s `opening_line`/`opening_translation`)
+   is curated, not generated — guarantees a consistent, on-character first
+   line from turn 0, and saves a Gemini call per session start.
+2. **Full history replay.** `ConversationService.send_message` fetches up
+   to `HISTORY_LIMIT` (20) prior messages and threads them into every
+   prompt as `"Learner: ..." / "<Character name>: ..."` lines, alongside
+   the character's fixed personality description and the scenario's
+   title/setting. This is what makes Momo stay Momo (casual, encouraging)
+   and stay in the ramen shop scene ten messages in, rather than drifting.
+
+The learner's message is persisted only *after* the character's reply
+succeeds (see [DATABASE.md](DATABASE.md)'s `conversation_messages` note) —
+storing it earlier and having the Gemini call fail would leave a
+user-turn-with-no-reply in the history, which would then get replayed into
+the *next* prompt and confuse the character about whose turn it is.
+
+`tests/test_conversation.py` asserts this consistency directly: each
+scenario is checked to invoke its own assigned character
+(`fake_ai_service.calls`), and a multi-message exchange is checked to
+accumulate history correctly turn-over-turn (1 message before the first
+reply, 3 before the second, in the right role order).
 
 ## Testing
 
@@ -133,6 +177,13 @@ Automated tests never call the real Gemini API:
   scores correctly and feeds the learner model (including `reading`, which
   had no other data source before Phase 7), ownership checks on mini
   stories, and the same 502/503 patterns as Phase 6.
+* `tests/test_conversation.py` covers the Phase 8 routes with
+  `fake_ai_service` (which gained a `continue_conversation` method):
+  scenario listing, starting a session returns the correct static opening
+  line and character, sending a message returns the AI reply and awards
+  XP, the correct character is used per scenario, history accumulates
+  correctly across multiple turns (the scenario-consistency test), session
+  ownership (404 for someone else's session), and the 404/502 error paths.
 
 ## Privacy
 
@@ -151,6 +202,13 @@ Automated tests never call the real Gemini API:
   not a usage log — but it's *content Gemini produced*, not personal data
   about the learner who requested it, beyond the `generated_by_user_id`/
   ownership field needed to gate who can submit answers to a given story.
+* Phase 8's conversation turns (`conversation_messages`) are the one
+  exception to "only a lightweight log is stored" — the learner's own
+  message text is stored in full, since it's needed to reconstruct history
+  for future turns and to show the learner their own past conversations.
+  Only the minimum scenario/character context (never the learner's
+  profile, goals, or history from other features) is sent to Gemini per
+  turn.
 
 ## Content Storage (Phase 7)
 
@@ -164,6 +222,17 @@ but nothing would need to change in `questions`' shape if a later phase
 wanted to. Mini stories get their own `mini_stories` collection (a story's
 comprehension questions are naturally scoped to that one story, unlike
 vocab/grammar questions which are meant to be reusable across many tests).
+
+## Characters and Scenarios (Phase 8)
+
+`app/core/conversation_data.py` defines a static roster of 5 characters
+(only `momo`, `kiko`, `kenji` are assigned to a scenario yet — `yuki`/`ponta`
+are pre-defined for later phases to pick up without re-designing the cast)
+and 3 scenarios (`ramen_shop`, `convenience_store`, `train_station`), each
+scenario permanently paired with one character. This lives in code, not the
+database — small enough to version alongside the rest of the app, and it
+guarantees "which character speaks in which scenario" can never drift out
+of sync the way a database record edited independently of the code could.
 
 ## Configuration Bug Fixed in Phase 6
 

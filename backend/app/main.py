@@ -7,6 +7,7 @@ from app.api.activities import router as activities_router
 from app.api.ai import router as ai_router
 from app.api.ai_generation import router as ai_generation_router
 from app.api.auth import router as auth_router
+from app.api.conversation import router as conversation_router
 from app.api.grammar import router as grammar_router
 from app.api.health import router as health_router
 from app.api.mistakes import router as mistakes_router
@@ -22,6 +23,10 @@ from app.core.seed_data import GRAMMAR_N5, VOCABULARY_N5
 from app.core.test_seed_data import seed_test_engine
 from app.repositories.activity_repository import ActivityRepository
 from app.repositories.ai_interaction_repository import AIInteractionRepository
+from app.repositories.conversation_repository import (
+    ConversationMessageRepository,
+    ConversationSessionRepository,
+)
 from app.repositories.grammar_repository import GrammarRepository
 from app.repositories.mini_story_repository import MiniStoryRepository
 from app.repositories.profile_repository import LearnerProfileRepository
@@ -59,6 +64,8 @@ async def lifespan(app: FastAPI):
         await LearnerSkillRepository(db).ensure_indexes()
         await AIInteractionRepository(db).ensure_indexes()
         await MiniStoryRepository(db).ensure_indexes()
+        await ConversationSessionRepository(db).ensure_indexes()
+        await ConversationMessageRepository(db).ensure_indexes()
     except Exception:
         # MongoDB may be unavailable (e.g. local dev without it running yet);
         # the app should still start, and /api/health reports the DB status.
@@ -90,6 +97,7 @@ app.include_router(progress_router, prefix="/api/progress", tags=["progress"])
 app.include_router(mistakes_router, prefix="/api/mistakes", tags=["mistakes"])
 app.include_router(ai_router, prefix="/api/ai", tags=["ai"])
 app.include_router(ai_generation_router, prefix="/api/ai", tags=["ai-generation"])
+app.include_router(conversation_router, prefix="/api/conversation", tags=["conversation"])
 
 
 @app.get("/")

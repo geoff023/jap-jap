@@ -30,6 +30,8 @@ async def reset_database():
     await db["learner_skills"].delete_many({})
     await db["ai_interactions"].delete_many({})
     await db["mini_stories"].delete_many({})
+    await db["conversation_sessions"].delete_many({})
+    await db["conversation_messages"].delete_many({})
     # AI-generated questions are per-test state, unlike the seeded ones —
     # only clear the ones this test run could have created.
     await db["questions"].delete_many({"source": "ai_generated"})

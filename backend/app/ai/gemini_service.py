@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from app.ai.base import AIService, AIServiceError
 from app.schemas.ai import GrammarExplanation, MistakeExplanation, VocabularyExplanation
 from app.schemas.ai_generation import GeneratedMiniStory, GeneratedQuestion
+from app.schemas.conversation import ConversationReply
 
 DEFAULT_MODEL = "gemini-2.0-flash"
 
@@ -167,4 +168,39 @@ class GeminiService(AIService):
         except ValidationError as exc:
             raise AIServiceError(
                 "Gemini's generated mini story didn't match the expected format"
+            ) from exc
+
+    async def continue_conversation(
+        self,
+        character_name: str,
+        character_personality: str,
+        scenario_title: str,
+        scenario_setting: str,
+        level: str,
+        history: list[dict[str, str]],
+        user_message: str,
+    ) -> ConversationReply:
+        history_text = "\n".join(
+            f"{'Learner' if turn['role'] == 'user' else character_name}: {turn['content']}"
+            for turn in history
+        )
+        prompt = (
+            f"You are role-playing as {character_name} in a Japanese conversation practice "
+            f"app. Personality: {character_personality} "
+            f'Scene: "{scenario_title}" — {scenario_setting} '
+            f"You are talking with a Japanese learner at JLPT {level} level — keep your "
+            f"Japanese appropriate for that level (simple grammar/vocabulary for N5, "
+            "progressively more advanced toward N1). Stay in character and consistent "
+            "with the scene throughout.\n\n"
+            f"Conversation so far:\n{history_text}\n\nLearner: {user_message}\n\n"
+            "Respond with ONLY a JSON object (no markdown, no extra text) with exactly "
+            'these keys: "reply" (your in-character response, in Japanese), '
+            '"translation" (its English translation).'
+        )
+        data = await self._generate_json(prompt)
+        try:
+            return ConversationReply.model_validate(data)
+        except ValidationError as exc:
+            raise AIServiceError(
+                "Gemini's conversation reply didn't match the expected format"
             ) from exc

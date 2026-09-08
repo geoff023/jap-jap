@@ -3,6 +3,9 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import ActivityHistoryPage from './pages/ActivityHistoryPage'
 import AIPracticePage from './pages/AIPracticePage'
+import ConversationChatPage from './pages/ConversationChatPage'
+import ConversationHistoryPage from './pages/ConversationHistoryPage'
+import ConversationScenariosPage from './pages/ConversationScenariosPage'
 import DashboardPage from './pages/DashboardPage'
 import FlashcardsPage from './pages/FlashcardsPage'
 import LandingPage from './pages/LandingPage'
@@ -129,6 +132,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <MiniStoriesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/conversation"
+            element={
+              <ProtectedRoute>
+                <ConversationScenariosPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/conversation/history"
+            element={
+              <ProtectedRoute>
+                <ConversationHistoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/conversation/:sessionId"
+            element={
+              <ProtectedRoute>
+                <ConversationChatPage />
               </ProtectedRoute>
             }
           />

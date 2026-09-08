@@ -13,6 +13,10 @@ from app.core.database import get_database
 from app.core.security import decode_access_token
 from app.repositories.activity_repository import ActivityRepository
 from app.repositories.ai_interaction_repository import AIInteractionRepository
+from app.repositories.conversation_repository import (
+    ConversationMessageRepository,
+    ConversationSessionRepository,
+)
 from app.repositories.grammar_repository import GrammarRepository
 from app.repositories.mini_story_repository import MiniStoryRepository
 from app.repositories.profile_repository import LearnerProfileRepository
@@ -84,6 +88,18 @@ def get_mini_story_repository(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> MiniStoryRepository:
     return MiniStoryRepository(db)
+
+
+def get_conversation_session_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> ConversationSessionRepository:
+    return ConversationSessionRepository(db)
+
+
+def get_conversation_message_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> ConversationMessageRepository:
+    return ConversationMessageRepository(db)
 
 
 @lru_cache

@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 7 — AI Content Generation (complete)
+Phase 8 — Text Conversation (complete)
 
 ## Completed
 
@@ -14,6 +14,7 @@ Phase 7 — AI Content Generation (complete)
 - Phase 5: Learner Model + Progress — skill mastery, progress dashboard, mistakes, activity history, estimated JLPT readiness.
 - Phase 6: Gemini AI Tutor — AIService → GeminiService, grammar/vocabulary/mistake explanations, structured + Pydantic-validated, mocked in all tests.
 - Phase 7: AI Content Generation — supplementary AI-generated vocabulary/grammar questions, mini stories, comprehension questions; all validated and stored.
+- Phase 8: Text Conversation — roleplay conversation sessions with AI characters across 3 scenarios (ramen shop, convenience store, train station), full history threading for scenario consistency, conversation history view.
 
 ## Frontend
 
@@ -33,6 +34,21 @@ Phase 7 — AI Content Generation (complete)
   Progress, AI Practice, Mini Stories.
 - Test tooling: Vitest + RTL, 34 tests total (added
   `AIPracticePage.test.tsx`, `MiniStoriesPage.test.tsx`).
+
+### Phase 8 additions
+
+- `src/services/conversationApi.ts`, `src/types/conversation.ts` — client
+  for the five `/api/conversation/*` endpoints.
+- New pages: `ConversationScenariosPage` (`/conversation` — pick a JLPT
+  level and one of 3 scenarios, starts a session and navigates to it),
+  `ConversationChatPage` (`/conversation/:sessionId` — chat-bubble UI,
+  send a message, see the character's reply and translation, XP earned),
+  `ConversationHistoryPage` (`/conversation/history` — past sessions,
+  newest-activity-first, links back into each one).
+- Dashboard's practice grid grew to 7 tiles: added Conversation (💬).
+- Test tooling: Vitest + RTL, 41 tests total (added
+  `ConversationScenariosPage.test.tsx`, `ConversationChatPage.test.tsx`,
+  `ConversationHistoryPage.test.tsx`).
 
 ## Backend
 
@@ -80,6 +96,41 @@ Phase 7 — AI Content Generation (complete)
   business-validation-rejection cases: too few options, duplicate options,
   correct answer missing from options).
 
+### Phase 8 additions
+
+- `app/core/conversation_data.py` — static roster of characters and
+  scenarios (see [AI.md](AI.md)); `app/schemas/conversation.py` — request/
+  response schemas plus `ConversationReply` (Gemini's per-turn structured
+  output).
+- `app/ai/base.py` / `gemini_service.py` — new `continue_conversation`
+  method: builds a prompt from the character's personality, the scenario,
+  the learner's JLPT level, and the full replayed history, then validates
+  Gemini's JSON reply the same way as every other `AIService` method.
+- `app/repositories/conversation_repository.py` —
+  `ConversationSessionRepository` / `ConversationMessageRepository`.
+- `app/services/conversation_service.py::ConversationService` — starts
+  sessions (static opening line, no Gemini call), sends messages
+  (reconstructs history → calls Gemini → persists both turns → awards
+  XP), lists/fetches sessions with ownership checks. Persists the
+  learner's message only *after* the AI reply succeeds — see
+  [DATABASE.md](DATABASE.md) for why persisting it first would corrupt
+  future history.
+- `app/api/conversation.py` — `GET /api/conversation/scenarios`,
+  `POST /api/conversation/sessions`, `GET /api/conversation/sessions`,
+  `GET /api/conversation/sessions/{id}`,
+  `POST /api/conversation/sessions/{id}/messages`. Scenario/session
+  browsing needs no onboarding; starting a session and sending a message
+  do (XP-earning), matching the established pattern.
+- 3 XP per message sent — lower than quiz/test XP (10) since there's no
+  correct/incorrect answer to verify; conversation is deliberately **not**
+  written to `learner_skills` (see [AI.md](AI.md)'s "What Gemini Is (and
+  Isn't) Used For").
+- Test tooling: pytest, 108 tests total (added `test_conversation.py`:
+  scenario listing, session start/opening-line correctness, message
+  send + XP award, per-scenario character correctness, **history
+  accumulation across turns** — the scenario-consistency test — ownership
+  checks, and the 404/502 error paths).
+
 ## Database
 
 - Added `mini_stories` (indexed on `level`, `generated_by_user_id`).
@@ -90,11 +141,14 @@ Phase 7 — AI Content Generation (complete)
 - Tests clean `mini_stories` fully and `questions` filtered to
   `source: "ai_generated"` between tests (seeded questions stay, matching
   the existing shared-reference-content pattern).
+- Added `conversation_sessions` (indexed on `user_id`) and
+  `conversation_messages` (indexed on `session_id`). Tests clean both
+  fully between runs. See [DATABASE.md](DATABASE.md).
 
 ## AI
 
-- Extended — see [AI.md](AI.md) for the full Phase 7 pipeline, storage
-  design, and privacy notes.
+- Extended — see [AI.md](AI.md) for the full Phase 6–8 pipeline, storage
+  design, conversation-consistency approach, and privacy notes.
 
 ## Speech
 
@@ -102,16 +156,24 @@ Phase 7 — AI Content Generation (complete)
 
 ## Testing
 
-- Backend: pytest, 93 tests passing (health, config, auth, profile,
+- Backend: pytest, 108 tests passing (health, config, auth, profile,
   activities, test engine, learner model/progress, AI tutor, AI content
-  generation).
-- Frontend: Vitest + React Testing Library, 34 tests passing.
+  generation, conversation).
+- Frontend: Vitest + React Testing Library, 41 tests passing.
 - E2E (Playwright or similar): not yet set up — planned for a later phase.
 - **Manually verified against the real Gemini API** (same non-functional
-  local key as Phase 6): confirmed `/api/ai/generate/vocabulary-question`
-  genuinely reaches Gemini (visible in network requests as a real HTTP
-  round-trip, not an instant mock response) and that a provider failure
-  renders as the same friendly retry message pattern established in Phase 6.
+  local key as Phases 6–7): registered a user, completed onboarding,
+  started a Ramen Shop conversation with Momo (confirmed the correct
+  static opening line and character), and sent a message — confirmed the
+  request genuinely reaches Gemini (visible in the backend log as a real
+  502 from the provider, not an instant mock response) and the learner
+  sees the same friendly retry message pattern established in Phase 6.
+  This manual run also caught a real bug — the learner's message was being
+  persisted *before* the Gemini call, so a failed reply left a dangling,
+  unanswered turn in the database that would have corrupted the next
+  prompt's history — fixed by reordering `ConversationService.send_message`
+  to persist only after the reply succeeds (verified in the same manual
+  session: a second failed send left the message count unchanged).
 
 ## CI/CD
 
@@ -126,17 +188,25 @@ Phase 7 — AI Content Generation (complete)
 ## Technical Debt
 
 - Carried over: `POST /api/auth/logout` protected no-op; no rate limiting on
-  auth/onboarding/AI endpoints (generation endpoints are the most
-  cost-bearing calls in the app now — two Gemini calls per learner action
-  in the worst case, generate then submit — rate limiting these specifically
-  should be a priority before any public deployment); only N5 seed content
-  exists (AI generation partially offsets this by supporting any JLPT level
-  on demand); no level picker on the *seeded*-content practice pages.
+  auth/onboarding/AI endpoints (every message sent in a conversation is now
+  its own Gemini call, on top of the Phase 7 generate/submit calls — rate
+  limiting AI endpoints specifically should be a priority before any public
+  deployment); only N5 seed content exists (AI generation partially offsets
+  this by supporting any JLPT level on demand); no level picker on the
+  *seeded*-content practice pages.
 - AI-generated questions are stored indefinitely with no expiry/cleanup —
   fine at current scale, worth revisiting if generation volume grows.
 - `mini_stories` documents are never listed back to their creator (no
   "my past stories" page) — each generation is a one-off experience, by
   design for this phase; revisit if that turns out to feel incomplete.
+- Conversation sessions never expire/archive and `HISTORY_LIMIT` (20) is a
+  fixed constant, not configurable per level/scenario — fine at current
+  scale; a very long-running session's early turns simply drop out of what
+  gets replayed to Gemini, which only matters if a learner has an
+  unusually long single conversation.
+- No way to end/delete a conversation session — sessions accumulate
+  indefinitely in the history list; acceptable for now since browsing is
+  free and there's no per-session cost beyond storage.
 
 ## Important Decisions
 
@@ -170,9 +240,34 @@ Phase 7 — AI Content Generation (complete)
   only the endpoints that award XP (`*/submit`) do — matches the existing
   "browsing is free, earning XP requires a profile" pattern from Phases 3–4
   (e.g. `GET /api/vocabulary` vs `POST /api/activities/quiz/submit`).
+- Characters and scenarios (Phase 8) are a static, in-code roster
+  (`app/core/conversation_data.py`), not a database collection — small and
+  curated enough that versioning them alongside the app guarantees "which
+  character speaks in which scenario" can never drift, unlike a database
+  record that could be edited independently of the code that assumes its
+  shape.
+- Scenario opening lines are static/curated, not AI-generated — guarantees
+  a consistent first line from turn 0 for every learner in a given
+  scenario, and saves one Gemini call per session start.
+- `ConversationService.send_message` calls Gemini *before* persisting the
+  learner's message (not the other way around) — discovered via manual
+  browser verification that persisting first would leave a dangling,
+  unanswered user turn in the database on AI failure, corrupting the next
+  prompt's history reconstruction. This ordering also means a failed send
+  costs nothing in stored state — a retry is indistinguishable from a first
+  attempt.
+- Conversation turns intentionally do **not** feed `learner_skills` — open-
+  ended chat has no single correct answer to score against, so recording it
+  would mean fabricating a mastery number, violating the never-fabricate
+  principle used everywhere else in the learner model. XP is a flat 3 per
+  message instead of a correctness-based amount.
+- Conversation XP (3/message) is deliberately lower than quiz/test XP
+  (10/correct answer) since sending a message requires no correctness check
+  — keeps the XP economy weighted toward verified learning, not just
+  activity volume.
 
 ## Next Phase
 
-Phase 8 — Text Conversation (conversation sessions, characters, scenarios,
-Gemini responses, conversation history; starting with ramen shop,
-convenience store, train station scenarios)
+Phase 9 — Speech-to-Text (pronunciation practice, `SpeechToTextService`
+abstraction mirroring `AIService`, speaking attempts, integration with the
+`speaking` learner-model category)

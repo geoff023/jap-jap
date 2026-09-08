@@ -1,6 +1,7 @@
 from app.ai.base import AIService, AIServiceError
 from app.schemas.ai import GrammarExplanation, MistakeExplanation, VocabularyExplanation
 from app.schemas.ai_generation import ComprehensionQuestion, GeneratedMiniStory, GeneratedQuestion
+from app.schemas.conversation import ConversationReply
 
 
 class FakeAIService(AIService):
@@ -96,4 +97,31 @@ class FakeAIService(AIService):
                     explanation="The story says they went to the store (店).",
                 ),
             ],
+        )
+
+    async def continue_conversation(
+        self,
+        character_name: str,
+        character_personality: str,
+        scenario_title: str,
+        scenario_setting: str,
+        level: str,
+        history: list[dict[str, str]],
+        user_message: str,
+    ) -> ConversationReply:
+        self.calls.append(
+            (
+                "continue_conversation",
+                character_name,
+                scenario_title,
+                level,
+                list(history),
+                user_message,
+            )
+        )
+        if self.should_fail:
+            raise AIServiceError("fake failure")
+        return ConversationReply(
+            reply=f"（{character_name}より）はい、かしこまりました。",
+            translation=f"(From {character_name}) Yes, understood.",
         )

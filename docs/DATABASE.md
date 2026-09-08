@@ -204,14 +204,67 @@ Note: `questions` (Phase 4) gained a `source` field in Phase 7 —
 future cleanup/reporting) distinguish the two without touching existing
 seeded documents.
 
+### `conversation_sessions` (Phase 8)
+
+Managed by `app/repositories/conversation_repository.py::ConversationSessionRepository`.
+One document per started roleplay conversation. `scenario_key`/`character_key`
+are static lookups into `app/core/conversation_data.py`, not denormalized
+copies — a scenario's character/title/etc. can never drift out of sync with
+what's actually shown, since there's only one place they're defined.
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | |
+| `user_id` | string | indexed |
+| `scenario_key` | string | `ramen_shop` \| `convenience_store` \| `train_station` |
+| `character_key` | string | derived from the scenario at start time |
+| `level` | string | `JLPTLevel` value chosen when starting |
+| `started_at` | datetime (UTC) | |
+| `last_message_at` | datetime (UTC) | updated by `touch()` after each successful exchange — powers "newest first" ordering in the history list |
+| `message_count` | int | incremented by `touch()`; only counts messages from a successful exchange (see `conversation_messages` note below) |
+
+### `conversation_messages` (Phase 8)
+
+Managed by `app/repositories/conversation_repository.py::ConversationMessageRepository`.
+One document per turn (`role: "user"` or `"character"`), ordered by
+`created_at` and replayed (bounded by `HISTORY_LIMIT = 20`) into every
+Gemini prompt so the character/scene stay consistent across turns despite
+each Gemini call being stateless. The opening `"character"` message per
+session is a static, curated line from `conversation_data.py` (not
+AI-generated) — guarantees a consistent first line and saves a Gemini call.
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | |
+| `session_id` | string | indexed |
+| `role` | string | `user` \| `character` |
+| `content` | string | Japanese text |
+| `translation` | string \| null | English translation; `null` for user messages (never translated) |
+| `created_at` | datetime (UTC) | |
+
+**Important:** `ConversationService.send_message` calls `AIService.continue_conversation`
+*before* persisting the user's message — if Gemini fails, nothing is written
+for that turn. Persisting the user's turn first (attempted, then reverted
+in review) would leave a dangling "user" message with no reply, which would
+then be replayed as history into the *next* prompt and confuse the
+character about whose turn it is.
+
+Deliberately **not** written to `learner_skills` — conversation is
+open-ended, so there's no single "correct answer" per turn to score
+correct/incorrect against; fabricating a mastery number for the
+`conversation` category would violate the never-fabricate principle used
+everywhere else in the learner model (see [DATABASE.md](DATABASE.md)'s
+`learner_skills` section). Conversation activity is tracked instead via
+these two collections and their own history view — `GET /api/progress`'s
+`conversation` skill continues to report `has_data: false` until a later
+phase gives it a real scoring mechanism.
+
 ## Planned Collections
 
 These will be introduced as the relevant phase implements them:
 
 ```
 kanji
-conversation_sessions
-conversation_messages
 speaking_attempts
 progress_events
 achievements
@@ -233,13 +286,14 @@ test_attempts.user_id — implemented, see TestAttemptRepository.ensure_indexes(
 learner_skills.(user_id, category, concept) (unique), learner_skills.user_id — implemented, see LearnerSkillRepository.ensure_indexes()
 ai_interactions.user_id — implemented, see AIInteractionRepository.ensure_indexes()
 mini_stories.level, mini_stories.generated_by_user_id — implemented, see MiniStoryRepository.ensure_indexes()
+conversation_sessions.user_id — implemented, see ConversationSessionRepository.ensure_indexes()
+conversation_messages.session_id — implemented, see ConversationMessageRepository.ensure_indexes()
 ```
 
 ### Planned (minimum)
 
 ```
 progress_events.userId
-conversation_sessions.userId
 ```
 
 Indexes will be created via repository-layer setup code as each collection
