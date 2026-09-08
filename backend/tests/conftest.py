@@ -34,6 +34,7 @@ async def reset_database():
     await db["conversation_messages"].delete_many({})
     await db["speaking_attempts"].delete_many({})
     await db["user_achievements"].delete_many({})
+    await db["review_schedule"].delete_many({})
     # AI-generated questions are per-test state, unlike the seeded ones —
     # only clear the ones this test run could have created.
     await db["questions"].delete_many({"source": "ai_generated"})
@@ -85,7 +86,7 @@ async def onboarded_auth_headers(client, auth_headers):
 
 @pytest_asyncio.fixture
 async def seed_content():
-    """Seed the N5 vocabulary/grammar content if not already present.
+    """Seed the N5 vocabulary/grammar/kanji content if not already present.
 
     App startup normally does this (see app/main.py's lifespan), but
     httpx's ASGITransport doesn't trigger lifespan events, so tests seed
@@ -94,13 +95,16 @@ async def seed_content():
     collections aren't cleared between tests — see reset_database above).
     """
     from app.core.database import get_database
+    from app.core.kanji_seed_data import KANJI_N5
     from app.core.seed_data import GRAMMAR_N5, VOCABULARY_N5
     from app.repositories.grammar_repository import GrammarRepository
+    from app.repositories.kanji_repository import KanjiRepository
     from app.repositories.vocabulary_repository import VocabularyRepository
 
     db = get_database()
     await VocabularyRepository(db).seed_if_empty(VOCABULARY_N5)
     await GrammarRepository(db).seed_if_empty(GRAMMAR_N5)
+    await KanjiRepository(db).seed_if_empty(KANJI_N5)
 
 
 @pytest_asyncio.fixture

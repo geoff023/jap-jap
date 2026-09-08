@@ -4,13 +4,17 @@ from app.api.deps import (
     get_activity_repository,
     get_current_user,
     get_grammar_repository,
+    get_kanji_repository,
     get_profile_repository,
+    get_review_schedule_repository,
     get_skill_repository,
     get_vocabulary_repository,
 )
 from app.repositories.activity_repository import ActivityRepository
 from app.repositories.grammar_repository import GrammarRepository
+from app.repositories.kanji_repository import KanjiRepository
 from app.repositories.profile_repository import LearnerProfileRepository
+from app.repositories.review_schedule_repository import ReviewScheduleRepository
 from app.repositories.skill_repository import LearnerSkillRepository
 from app.repositories.vocabulary_repository import VocabularyRepository
 from app.schemas.activity import (
@@ -23,7 +27,10 @@ from app.schemas.activity import (
     QuizSubmitResponse,
     activity_to_history_entry,
 )
+from app.schemas.grammar import GrammarConcept, grammar_to_public
+from app.schemas.kanji import KanjiItem, kanji_to_public
 from app.schemas.profile import JLPTLevel
+from app.schemas.vocabulary import VocabularyItem, vocabulary_to_public
 from app.services.activity_service import (
     ActivityService,
     NotEnoughContentError,
@@ -36,11 +43,15 @@ router = APIRouter()
 def _service(
     vocabulary: VocabularyRepository = Depends(get_vocabulary_repository),
     grammar: GrammarRepository = Depends(get_grammar_repository),
+    kanji: KanjiRepository = Depends(get_kanji_repository),
     activities: ActivityRepository = Depends(get_activity_repository),
     profiles: LearnerProfileRepository = Depends(get_profile_repository),
     skills: LearnerSkillRepository = Depends(get_skill_repository),
+    review_schedule: ReviewScheduleRepository = Depends(get_review_schedule_repository),
 ) -> ActivityService:
-    return ActivityService(vocabulary, grammar, activities, profiles, skills)
+    return ActivityService(
+        vocabulary, grammar, kanji, activities, profiles, skills, review_schedule
+    )
 
 
 @router.get("/quiz", response_model=QuizResponse)
@@ -52,10 +63,32 @@ async def get_quiz(
     service: ActivityService = Depends(_service),
 ) -> QuizResponse:
     try:
-        questions = await service.generate_quiz(category, level, size)
+        questions = await service.generate_quiz(str(current_user["_id"]), category, level, size)
     except NotEnoughContentError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return QuizResponse(category=category, level=level, questions=questions)
+
+
+@router.get(
+    "/flashcards", response_model=list[VocabularyItem] | list[GrammarConcept] | list[KanjiItem]
+)
+async def get_flashcard_deck(
+    category: ActivityCategory,
+    level: JLPTLevel,
+    current_user: dict = Depends(get_current_user),
+    service: ActivityService = Depends(_service),
+) -> list[VocabularyItem] | list[GrammarConcept] | list[KanjiItem]:
+    """Same content as GET /api/vocabulary, /api/grammar, or /api/kanji, but
+    ordered due-for-review-first for this learner — see
+    docs/PROJECT_STATE.md's Phase 12 section. The plain content endpoints
+    stay unordered/unpersonalized on purpose; this one is the personalized
+    study-queue equivalent."""
+    items = await service.get_flashcard_deck(str(current_user["_id"]), category, level)
+    if category == ActivityCategory.VOCABULARY:
+        return [vocabulary_to_public(item) for item in items]
+    if category == ActivityCategory.KANJI:
+        return [kanji_to_public(item) for item in items]
+    return [grammar_to_public(item) for item in items]
 
 
 @router.post("/quiz/submit", response_model=QuizSubmitResponse)

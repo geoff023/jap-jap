@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as activityApi from '../services/activityApi'
 import * as aiApi from '../services/aiApi'
 import { useAuthStore } from '../stores/authStore'
-import type { VocabularyItem } from '../types/activity'
+import type { KanjiItem, VocabularyItem } from '../types/activity'
 import FlashcardsPage from './FlashcardsPage'
 
 const testUser = { id: '1', email: 'test@example.com', created_at: '2026-01-01T00:00:00Z' }
@@ -32,6 +32,20 @@ const deck: VocabularyItem[] = [
   },
 ]
 
+const kanjiDeck: KanjiItem[] = [
+  {
+    id: 'k1',
+    character: '日',
+    onyomi: 'ニチ、ジツ',
+    kunyomi: 'ひ、-び、-か',
+    meaning: 'day, sun, Japan',
+    level: 'N5',
+    example_word: '毎日',
+    example_reading: 'まいにち',
+    example_meaning: 'every day',
+  },
+]
+
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -51,7 +65,7 @@ describe('FlashcardsPage', () => {
 
   it('walks through the deck and reports XP earned on completion', async () => {
     const user = userEvent.setup()
-    vi.spyOn(activityApi, 'fetchVocabulary').mockResolvedValue(deck)
+    vi.spyOn(activityApi, 'fetchFlashcardDeck').mockResolvedValue(deck)
     vi.spyOn(activityApi, 'completeFlashcards').mockResolvedValue({
       known_count: 1,
       total: 2,
@@ -83,7 +97,7 @@ describe('FlashcardsPage', () => {
 
   it('shows an AI Tutor explanation when asked', async () => {
     const user = userEvent.setup()
-    vi.spyOn(activityApi, 'fetchVocabulary').mockResolvedValue(deck)
+    vi.spyOn(activityApi, 'fetchFlashcardDeck').mockResolvedValue(deck)
     vi.spyOn(aiApi, 'explainVocabulary').mockResolvedValue({
       term: '食べる',
       meaning: 'to eat',
@@ -100,5 +114,24 @@ describe('FlashcardsPage', () => {
 
     expect(await screen.findByText('A common ichidan verb.')).toBeInTheDocument()
     expect(aiApi.explainVocabulary).toHaveBeenCalledWith('a-token', '食べる', undefined)
+  })
+
+  it('switches to the kanji deck and reveals readings/meaning', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(activityApi, 'fetchFlashcardDeck').mockImplementation((_token, category) =>
+      Promise.resolve(category === 'kanji' ? kanjiDeck : deck),
+    )
+
+    renderPage()
+
+    await screen.findByText('食べる')
+    await user.click(screen.getByRole('button', { name: 'kanji' }))
+
+    expect(await screen.findByText('日')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show answer' }))
+
+    expect(screen.getByText('day, sun, Japan')).toBeInTheDocument()
+    expect(screen.getByText('音読み ニチ、ジツ ・ 訓読み ひ、-び、-か')).toBeInTheDocument()
+    expect(screen.getByText('毎日 (まいにち) — every day')).toBeInTheDocument()
   })
 })

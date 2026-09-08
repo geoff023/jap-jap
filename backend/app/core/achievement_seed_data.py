@@ -54,7 +54,8 @@ ACHIEVEMENTS: list[dict] = [
         "key": "well_rounded",
         "name": "Well-Rounded",
         "description": (
-            "Try every practice type: vocabulary, grammar, reading, speaking, and conversation."
+            "Try every practice type: vocabulary, grammar, kanji, reading, "
+            "speaking, and conversation."
         ),
         "emoji": "🌟",
     },

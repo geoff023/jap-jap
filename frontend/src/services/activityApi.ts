@@ -5,6 +5,7 @@ import type {
   FlashcardCompletePayload,
   FlashcardCompleteResponse,
   GrammarConcept,
+  KanjiItem,
   QuizResponse,
   QuizSubmitPayload,
   QuizSubmitResponse,
@@ -43,6 +44,18 @@ export function fetchVocabulary(token: string, level: JlptLevel): Promise<Vocabu
 
 export function fetchGrammar(token: string, level: JlptLevel): Promise<GrammarConcept[]> {
   return getJson(`/api/grammar?level=${level}`, token)
+}
+
+export function fetchKanji(token: string, level: JlptLevel): Promise<KanjiItem[]> {
+  return getJson(`/api/kanji?level=${level}`, token)
+}
+
+export function fetchFlashcardDeck(
+  token: string,
+  category: ActivityCategory,
+  level: JlptLevel,
+): Promise<(VocabularyItem | GrammarConcept | KanjiItem)[]> {
+  return getJson(`/api/activities/flashcards?category=${category}&level=${level}`, token)
 }
 
 export function fetchQuiz(

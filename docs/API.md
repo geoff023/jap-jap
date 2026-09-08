@@ -197,13 +197,46 @@ quiz below, and shown directly here for flashcard study).
 ]
 ```
 
+### `GET /api/kanji`
+
+Requires `Authorization: Bearer <token>`. **New in Phase 13.** Returns
+kanji items, optionally filtered by `?level=N5`. Content sourcing: see
+[PROJECT_STATE.md](PROJECT_STATE.md)'s Phase 13 Important Decisions —
+character/reading/meaning facts are researched from public JLPT-scope
+references, `example_word`/`example_reading`/`example_meaning` are
+original compositions.
+
+```json
+[
+  {
+    "id": "...",
+    "character": "日",
+    "onyomi": "ニチ、ジツ",
+    "kunyomi": "ひ、-び、-か",
+    "meaning": "day, sun, Japan",
+    "level": "N5",
+    "example_word": "毎日",
+    "example_reading": "まいにち",
+    "example_meaning": "every day"
+  }
+]
+```
+
 ### `GET /api/activities/quiz`
 
 Requires `Authorization: Bearer <token>`. Generates a stateless multiple-choice
 quiz — nothing is persisted until `/quiz/submit`. Query params: `category`
-(`vocabulary` or `grammar`), `level` (e.g. `N5`), `size` (default 5, 1–20).
-For `vocabulary` this is a **multiple choice** activity (term → meaning); for
-`grammar` it's **sentence completion** (fill the blank in `example_sentence`).
+(`vocabulary`, `grammar`, or `kanji` — the last added in Phase 13), `level`
+(e.g. `N5`), `size` (default 5, 1–20). For `vocabulary`/`kanji` this is a
+**multiple choice** activity (term/character → meaning); for `grammar` it's
+**sentence completion** (fill the blank in `example_sentence`).
+
+**Since Phase 12**, item selection is spaced-repetition-aware: concepts
+this learner has never seen, or that are due for review, are prioritized
+over ones just answered correctly — so a small `size` won't keep re-serving
+whatever the learner already knows well. Plain deterministic backend
+logic, no AI involved — see [PROJECT_STATE.md](PROJECT_STATE.md)'s Phase
+12 section for the full scheduling design.
 
 ```json
 {
@@ -284,6 +317,28 @@ server-verified). Records a `learning_activities` document with
 
 Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if
 onboarding hasn't been completed yet.
+
+### `GET /api/activities/flashcards`
+
+Requires `Authorization: Bearer <token>`. **New in Phase 12; gained
+`kanji` as a third category in Phase 13.** Query params: `category`
+(`vocabulary`, `grammar`, or `kanji`), `level`. Same content as
+`GET /api/vocabulary`/`GET /api/grammar`/`GET /api/kanji` for that level —
+every item, none dropped — but reordered for this learner: never-reviewed
+and due-for-review concepts first, recently-and-correctly-answered ones
+pushed toward the back. The plain content endpoints deliberately stay
+unordered and unpersonalized; this is the study-queue equivalent, same
+split as quiz generation having its own endpoint separate from raw
+content.
+
+```json
+[
+  { "id": "...", "term": "食べる", "reading": "たべる", "meaning": "to eat", "level": "N5", "example_sentence": "...", "example_translation": "..." }
+]
+```
+
+(Grammar and kanji responses use `GrammarConcept`'s/`KanjiItem`'s shape
+instead — see `GET /api/grammar`/`GET /api/kanji` above.)
 
 ### `GET /api/tests`
 
@@ -844,12 +899,8 @@ every subsequent call — checking is idempotent, never re-timestamps.
 
 ## Planned Routes (added phase by phase)
 
-These are not implemented yet — listed here to reflect the intended surface
-as the project grows:
-
-| Route | Phase |
-|---|---|
-| `/api/kanji` | 13 |
-
-Each route follows `routes → services → repositories → MongoDB`; see
+`/api/kanji` (the last entry on this list) shipped in Phase 13 — see
+above. Nothing else is currently on the explicitly-planned list; future
+routes will be added here as later phases scope them. Each route follows
+`routes → services → repositories → MongoDB`; see
 [ARCHITECTURE.md](ARCHITECTURE.md).

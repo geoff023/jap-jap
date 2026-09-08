@@ -123,7 +123,14 @@ thresholds, nothing AI-generated about it. **Phase 11's achievement engine
 is the same story** — `AchievementService` checks fixed criteria (XP
 thresholds, activity counts, category mastery) against existing data with
 no Gemini call anywhere in the path; gamification milestones are scoring
-logic, not content Gemini could plausibly generate anyway.
+logic, not content Gemini could plausibly generate anyway. **Phase 12's
+spaced-repetition scheduler is the same rule applied to content
+selection** — deciding *which* concept to show next (due-for-review vs.
+recently-mastered) is scoring/ranking logic exactly like Phase 10's
+recommendations, computed entirely in `ReviewScheduleRepository`/
+`ActivityService`, no Gemini involved. The content itself (a vocabulary
+word, a grammar point) is still the same original, non-AI-authored
+material from Phase 3 — Phase 12 only changes the order it's served in.
 
 ## Graceful Degradation
 

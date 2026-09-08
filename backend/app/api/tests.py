@@ -4,12 +4,14 @@ from app.api.deps import (
     get_current_user,
     get_profile_repository,
     get_question_repository,
+    get_review_schedule_repository,
     get_skill_repository,
     get_test_attempt_repository,
     get_test_repository,
 )
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.question_repository import QuestionRepository
+from app.repositories.review_schedule_repository import ReviewScheduleRepository
 from app.repositories.skill_repository import LearnerSkillRepository
 from app.repositories.test_attempt_repository import TestAttemptRepository
 from app.repositories.test_repository import TestRepository
@@ -42,8 +44,9 @@ def _service(
     attempts: TestAttemptRepository = Depends(get_test_attempt_repository),
     profiles: LearnerProfileRepository = Depends(get_profile_repository),
     skills: LearnerSkillRepository = Depends(get_skill_repository),
+    review_schedule: ReviewScheduleRepository = Depends(get_review_schedule_repository),
 ) -> TestService:
-    return TestService(tests, questions, attempts, profiles, skills)
+    return TestService(tests, questions, attempts, profiles, skills, review_schedule)
 
 
 # Order matters: literal paths ("/attempts", "/attempts/{id}") must be

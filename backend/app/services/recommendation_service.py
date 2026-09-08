@@ -9,9 +9,10 @@ from app.repositories.skill_repository import LearnerSkillRepository
 MIN_ATTEMPTS_FOR_WEAKNESS = 3
 WEAK_MASTERY_THRESHOLD = 0.7
 
-# Only categories with an actual practice route to recommend — kanji and
-# listening have no implemented content yet (see docs/PROJECT_STATE.md), so
-# there is nothing useful to link a recommendation to.
+# Only categories with an actual practice route to recommend — listening
+# has no implemented content yet (see docs/PROJECT_STATE.md), so there is
+# nothing useful to link a recommendation to. Kanji joined this list in
+# Phase 13.
 CATEGORY_ACTIONS: dict[str, dict[str, str]] = {
     "vocabulary": {
         "untried_message": "Try a vocabulary quiz to start building your profile.",
@@ -25,6 +26,12 @@ CATEGORY_ACTIONS: dict[str, dict[str, str]] = {
         "untried_message": "Try a grammar quiz to pick up a few new patterns.",
         "weak_message": "Your grammar mastery is {pct}% — a bit of review could help.",
         "action_label": "Practice grammar",
+        "action_path": "/quiz",
+    },
+    "kanji": {
+        "untried_message": "Learn some kanji — start with a quiz or flashcard deck.",
+        "weak_message": "Your kanji mastery is {pct}% — a bit of review could help.",
+        "action_label": "Practice kanji",
         "action_path": "/quiz",
     },
     "reading": {
@@ -50,7 +57,7 @@ CATEGORY_ACTIONS: dict[str, dict[str, str]] = {
 # "has this been tried" for it can't come from mastery data the way it can
 # for every other category — it's answered by checking for a session
 # directly.
-CATEGORIES_SCORED_BY_MASTERY = ["vocabulary", "grammar", "reading", "speaking"]
+CATEGORIES_SCORED_BY_MASTERY = ["vocabulary", "grammar", "kanji", "reading", "speaking"]
 
 
 class RecommendationService:

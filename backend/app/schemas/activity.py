@@ -10,6 +10,7 @@ from app.schemas.profile import JLPTLevel
 class ActivityCategory(str, Enum):
     VOCABULARY = "vocabulary"
     GRAMMAR = "grammar"
+    KANJI = "kanji"
 
 
 class QuizQuestion(BaseModel):

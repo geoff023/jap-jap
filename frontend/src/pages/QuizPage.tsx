@@ -103,11 +103,11 @@ export default function QuizPage() {
           ← Back to dashboard
         </Link>
         <h1 className="text-2xl font-bold text-slate-800">
-          {category === 'vocabulary' ? 'Multiple choice' : 'Sentence completion'}
+          {category === 'grammar' ? 'Sentence completion' : 'Multiple choice'}
         </h1>
 
         <div className="flex gap-2">
-          {(['vocabulary', 'grammar'] as ActivityCategory[]).map((c) => (
+          {(['vocabulary', 'grammar', 'kanji'] as ActivityCategory[]).map((c) => (
             <button
               key={c}
               type="button"

@@ -11,6 +11,7 @@ from app.api.auth import router as auth_router
 from app.api.conversation import router as conversation_router
 from app.api.grammar import router as grammar_router
 from app.api.health import router as health_router
+from app.api.kanji import router as kanji_router
 from app.api.mistakes import router as mistakes_router
 from app.api.onboarding import router as onboarding_router
 from app.api.profile import router as profile_router
@@ -23,6 +24,7 @@ from app.api.vocabulary import router as vocabulary_router
 from app.core.achievement_seed_data import ACHIEVEMENTS
 from app.core.config import get_settings
 from app.core.database import close_client, get_database
+from app.core.kanji_seed_data import KANJI_N5
 from app.core.seed_data import GRAMMAR_N5, VOCABULARY_N5
 from app.core.test_seed_data import seed_test_engine
 from app.repositories.achievement_repository import (
@@ -36,9 +38,11 @@ from app.repositories.conversation_repository import (
     ConversationSessionRepository,
 )
 from app.repositories.grammar_repository import GrammarRepository
+from app.repositories.kanji_repository import KanjiRepository
 from app.repositories.mini_story_repository import MiniStoryRepository
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.question_repository import QuestionRepository
+from app.repositories.review_schedule_repository import ReviewScheduleRepository
 from app.repositories.skill_repository import LearnerSkillRepository
 from app.repositories.speaking_repository import SpeakingAttemptRepository
 from app.repositories.test_attempt_repository import TestAttemptRepository
@@ -65,12 +69,17 @@ async def lifespan(app: FastAPI):
         await grammar_repo.ensure_indexes()
         await grammar_repo.seed_if_empty(GRAMMAR_N5)
 
+        kanji_repo = KanjiRepository(db)
+        await kanji_repo.ensure_indexes()
+        await kanji_repo.seed_if_empty(KANJI_N5)
+
         await QuestionRepository(db).ensure_indexes()
         await TestRepository(db).ensure_indexes()
         await TestAttemptRepository(db).ensure_indexes()
         await seed_test_engine(db)
 
         await LearnerSkillRepository(db).ensure_indexes()
+        await ReviewScheduleRepository(db).ensure_indexes()
         await AIInteractionRepository(db).ensure_indexes()
         await MiniStoryRepository(db).ensure_indexes()
         await ConversationSessionRepository(db).ensure_indexes()
@@ -106,6 +115,7 @@ app.include_router(onboarding_router, prefix="/api/onboarding", tags=["onboardin
 app.include_router(profile_router, prefix="/api/profile", tags=["profile"])
 app.include_router(vocabulary_router, prefix="/api/vocabulary", tags=["vocabulary"])
 app.include_router(grammar_router, prefix="/api/grammar", tags=["grammar"])
+app.include_router(kanji_router, prefix="/api/kanji", tags=["kanji"])
 app.include_router(activities_router, prefix="/api/activities", tags=["activities"])
 app.include_router(tests_router, prefix="/api/tests", tags=["tests"])
 app.include_router(progress_router, prefix="/api/progress", tags=["progress"])

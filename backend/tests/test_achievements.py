@@ -121,7 +121,7 @@ async def test_well_rounded_requires_every_category(
     client, onboarded_auth_headers, seed_achievements
 ):
     user_id = await _user_id(client, onboarded_auth_headers)
-    for category in ["vocabulary", "grammar", "reading", "speaking"]:
+    for category in ["vocabulary", "grammar", "kanji", "reading", "speaking"]:
         await _record_skill(user_id, category, f"{category}-concept", correct=True)
     await client.post(
         "/api/conversation/sessions",

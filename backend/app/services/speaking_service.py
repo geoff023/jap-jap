@@ -5,6 +5,7 @@ from typing import Any
 
 from app.core.speaking_data import get_prompt, list_prompts
 from app.repositories.profile_repository import LearnerProfileRepository
+from app.repositories.review_schedule_repository import ReviewScheduleRepository
 from app.repositories.skill_repository import LearnerSkillRepository
 from app.repositories.speaking_repository import SpeakingAttemptRepository
 from app.speech.base import SpeechToTextService
@@ -39,11 +40,13 @@ class SpeakingService:
         attempts: SpeakingAttemptRepository,
         profiles: LearnerProfileRepository,
         skills: LearnerSkillRepository,
+        review_schedule: ReviewScheduleRepository,
     ):
         self._stt = stt
         self._attempts = attempts
         self._profiles = profiles
         self._skills = skills
+        self._review_schedule = review_schedule
 
     def list_prompts(self, level: str | None) -> list[dict[str, Any]]:
         return list_prompts(level)
@@ -88,6 +91,7 @@ class SpeakingService:
         )
 
         await self._skills.record_result(user_id, "speaking", prompt_key, is_correct, now)
+        await self._review_schedule.record_review(user_id, "speaking", prompt_key, is_correct, now)
         updated_profile = await self._profiles.increment_xp(user_id, xp_earned)
         assert updated_profile is not None
 

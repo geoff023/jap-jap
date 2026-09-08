@@ -3,12 +3,14 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from app.api.deps import (
     get_current_user,
     get_profile_repository,
+    get_review_schedule_repository,
     get_skill_repository,
     get_speaking_attempt_repository,
     get_stt_service,
 )
 from app.core.speaking_data import list_prompts as _list_prompts
 from app.repositories.profile_repository import LearnerProfileRepository
+from app.repositories.review_schedule_repository import ReviewScheduleRepository
 from app.repositories.skill_repository import LearnerSkillRepository
 from app.repositories.speaking_repository import SpeakingAttemptRepository
 from app.schemas.speech import (
@@ -48,8 +50,9 @@ def _service(
     attempts: SpeakingAttemptRepository = Depends(get_speaking_attempt_repository),
     profiles: LearnerProfileRepository = Depends(get_profile_repository),
     skills: LearnerSkillRepository = Depends(get_skill_repository),
+    review_schedule: ReviewScheduleRepository = Depends(get_review_schedule_repository),
 ) -> SpeakingService:
-    return SpeakingService(stt, attempts, profiles, skills)
+    return SpeakingService(stt, attempts, profiles, skills, review_schedule)
 
 
 @router.get("/prompts", response_model=list[SpeakingPromptPublic])

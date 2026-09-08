@@ -50,11 +50,12 @@ broader coverage is Phase 13's job).
 | `level` | string | `JLPTLevel` value |
 | `example_sentence`, `example_translation` | string \| null | |
 
-### `grammar_concepts` (Phase 3)
+### `grammar_concepts` (Phase 3, expanded Phase 13)
 
 Managed by `app/repositories/grammar_repository.py`. Seeded from
-`GRAMMAR_N5` (8 original N5 particle/conjugation points) the same way as
-vocabulary.
+`GRAMMAR_N5` (38 original N5 particle/conjugation/pattern points as of
+Phase 13, up from 8 — see [PROJECT_STATE.md](PROJECT_STATE.md)'s Phase 13
+section for sourcing) the same way as vocabulary.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -66,6 +67,29 @@ vocabulary.
 | `example_sentence` | string | contains a `___` blank |
 | `example_translation` | string | |
 | `answer` | string | the word/phrase that fills the blank — the "correct answer" for the grammar sentence-completion quiz |
+
+### `kanji` (Phase 13)
+
+Managed by `app/repositories/kanji_repository.py::KanjiRepository`. Seeded
+from `KANJI_N5` (80 real N5 kanji), same seed-from-code-into-Mongo pattern
+as vocabulary/grammar. `ActivityCategory.KANJI` reuses vocabulary's
+multiple-choice quiz shape (character → meaning). See
+[PROJECT_STATE.md](PROJECT_STATE.md)'s Phase 13 section for content
+sourcing (the character/reading/meaning facts are researched from public
+JLPT-scope references, not copied exam content; `example_word`/
+`example_reading`/`example_meaning` are original compositions).
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | |
+| `character` | string | the kanji itself — this is the "concept" tracked in `learner_skills`/`review_schedule`, same role as vocabulary's `term` |
+| `onyomi` | string | on-reading(s), katakana, comma-separated if multiple |
+| `kunyomi` | string | kun-reading(s), hiragana (okurigana in parentheses), `—` if none |
+| `meaning` | string | English meaning(s) — the "correct answer" for the kanji multiple-choice quiz |
+| `level` | string | `JLPTLevel` value |
+| `example_word` | string \| null | an original compound word using this kanji |
+| `example_reading` | string \| null | that word's reading |
+| `example_meaning` | string \| null | that word's English meaning |
 
 ### `learning_activities` (Phase 3)
 
@@ -324,14 +348,48 @@ detected" timestamp that stays stable across repeated checks.
 Unique index on `(user_id, achievement_key)` — the mechanism that makes
 `unlock()`'s upsert idempotent.
 
+### `review_schedule` (Phase 12)
+
+Managed by `app/repositories/review_schedule_repository.py::ReviewScheduleRepository`.
+One document per `(user_id, category, concept)` that has ever been
+reviewed — a concept with no document has simply never been seen. Entirely
+separate from `learner_skills` (Phase 5): that collection answers "how
+well does this learner know this concept" (mastery), this one answers
+"when should this learner see this concept again" (scheduling). Both are
+updated from the same answer event but serve different purposes and are
+never merged.
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | |
+| `user_id` | string | indexed |
+| `category` | string | `vocabulary` \| `grammar` \| `speaking` — the three genuinely reusable content pools (not `reading`/`conversation`, see [AI.md](AI.md)) |
+| `concept` | string | vocabulary `term`, grammar `key`, or speaking `prompt_key` |
+| `ease_factor` | float | SM-2-inspired; starts at 2.5, floored at 1.3, nudged ±0.1/0.2 per correct/incorrect answer |
+| `interval_days` | int | days until next due; 1 → 6 → `interval × ease_factor` across consecutive correct answers, reset to 1 on any incorrect answer |
+| `repetitions` | int | consecutive correct answers; reset to 0 on any incorrect answer |
+| `due_at` | datetime (UTC) | `last_reviewed_at + interval_days`; naive (no tzinfo) since Motor/PyMongo returns stored BSON datetimes naive by default — compared against a matching naive sentinel (`UNSEEN_SORT_KEY`), not `datetime.now(timezone.utc)` |
+| `last_reviewed_at` | datetime (UTC) | |
+| `created_at` | datetime (UTC) | set once on first review |
+
+Unique index on `(user_id, category, concept)`. Written to from every
+existing `learner_skills.record_result` call site
+(`ActivityService.submit_quiz`/`complete_flashcards`,
+`TestService.submit_attempt`, `SpeakingService.submit_attempt`) — one new
+line alongside each existing `record_result` call, not a new write path.
+Read by `ActivityService._rank_by_due_date`, which powers both
+`GET /api/activities/quiz`'s selection and `GET /api/activities/flashcards`'s
+ordering.
+
 ## Planned Collections
 
 These will be introduced as the relevant phase implements them:
 
 ```
-kanji
 progress_events
 ```
+
+Note: `kanji` was also on this list and shipped in Phase 13 — see above.
 
 Note: `recommendations` was on this list before Phase 10, but the phase
 deliberately didn't introduce it — recommendations are computed fresh from
@@ -349,6 +407,7 @@ users.email (unique) — implemented, see UserRepository.ensure_indexes()
 learner_profiles.user_id (unique) — implemented, see LearnerProfileRepository.ensure_indexes()
 vocabulary.level — implemented, see VocabularyRepository.ensure_indexes()
 grammar_concepts.level — implemented, see GrammarRepository.ensure_indexes()
+kanji.level — implemented, see KanjiRepository.ensure_indexes()
 learning_activities.user_id — implemented, see ActivityRepository.ensure_indexes()
 questions.category, questions.level — implemented, see QuestionRepository.ensure_indexes()
 tests.category, tests.level — implemented, see TestRepository.ensure_indexes()
@@ -361,6 +420,7 @@ conversation_messages.session_id — implemented, see ConversationMessageReposit
 speaking_attempts.user_id — implemented, see SpeakingAttemptRepository.ensure_indexes()
 achievements.key (unique) — implemented, see AchievementRepository.ensure_indexes()
 user_achievements.(user_id, achievement_key) (unique), user_achievements.user_id — implemented, see UserAchievementRepository.ensure_indexes()
+review_schedule.(user_id, category, concept) (unique), review_schedule.user_id — implemented, see ReviewScheduleRepository.ensure_indexes()
 ```
 
 ### Planned (minimum)

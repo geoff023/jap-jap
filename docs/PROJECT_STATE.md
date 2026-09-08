@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 11 — Achievements (complete)
+Phase 13 — Kanji + N5 Grammar Expansion (complete)
 
 ## Completed
 
@@ -18,6 +18,8 @@ Phase 11 — Achievements (complete)
 - Phase 9: Speech-to-Text — `SpeechToTextService` abstraction (`GeminiSTTProvider` implementation), pronunciation practice against 9 curated target phrases (N5–N1), browser microphone recording, similarity-based scoring, first real data source for the `speaking` learner-model category.
 - Phase 10: Adaptive Recommendations — deterministic "what to practice next" engine reading the learner model, surfaced as a "Recommended for you" panel on the dashboard; closes the `Learning → Practice → Assessment → Learner Model → Weakness Detection → Adaptive Recommendation` loop from [ARCHITECTURE.md](ARCHITECTURE.md).
 - Phase 11: Achievements — a 10-badge gamification catalog seeded into MongoDB (unlike Phase 8/9's in-code content), deterministic milestone detection across XP/activity/mastery/category-breadth, idempotent unlock-on-read with a stable `unlocked_at`, dedicated Achievements page.
+- Phase 12: Spaced Repetition — SM-2-inspired per-concept scheduling (`review_schedule` collection) for vocabulary, grammar, and speaking; quizzes and the flashcard deck now surface due/never-seen concepts first instead of re-serving whatever was just answered correctly, so a learner stops seeing the same well-known items on repeat.
+- Phase 13: Kanji + N5 Grammar Expansion — a full new Kanji practice category (80 real N5 kanji, quiz + flashcards, fully integrated into the learner model/recommendations/achievements/spaced-repetition) plus N5 grammar grown from 8 to 38 real, verified points, both researched from authoritative community-compiled JLPT scope references (not copied exam content — see this phase's section below for the copyright distinction).
 
 ## Frontend
 
@@ -99,6 +101,41 @@ Phase 11 — Achievements (complete)
 - Test tooling: Vitest + RTL, 54 tests total (added
   `AchievementsPage.test.tsx`: unlocked count, per-badge rendering,
   locked vs. unlocked distinction).
+
+### Phase 12 additions
+
+- `src/services/activityApi.ts` gained `fetchFlashcardDeck` — calls the new
+  `GET /api/activities/flashcards` endpoint instead of the plain
+  `GET /api/vocabulary`/`GET /api/grammar` content endpoints.
+- `FlashcardsPage` now studies the SRS-ordered deck (due/never-seen items
+  first) instead of the raw, unordered content list — same page, no new
+  route, since "smarter ordering" doesn't change what the feature *is*.
+- Added a small progress bar under the card counter (Card N of M) —
+  the first of the promised "more illustration/immersion" touches, folded
+  into each phase's UI work rather than done as one separate pass.
+- No changes needed to `QuizPage` — `GET /api/activities/quiz` already
+  used the same client function, so making the backend SRS-aware there
+  was transparent to the frontend.
+
+### Phase 13 additions
+
+- `ActivityCategory` (frontend) gained `'kanji'`; a new `KanjiItem` type
+  mirrors the backend schema. `activityApi.ts` gained `fetchKanji`.
+- `QuizPage` and `FlashcardsPage` both grew a third "Kanji" tab, reusing
+  every existing quiz/flashcard/XP/AI-Tutor code path — no new page, no
+  new route. `FlashcardsPage` gained a kanji-specific card face (large
+  character, then on reveal: meaning, onyomi/kunyomi readings, and an
+  example word) via a new `isKanjiItem` type guard alongside the existing
+  `isVocabItem` one.
+- No dashboard tile or dedicated `/kanji` page — kanji is reached through
+  the same Flashcards/Quiz tiles vocabulary and grammar already use, same
+  "third category, not a new feature" framing as the backend.
+- `ProgressPage`, the Dashboard's recommendations panel, and
+  `AchievementsPage` needed **zero** frontend changes — all three already
+  render whatever categories the backend returns/labels
+  (`CATEGORY_LABELS` already had a `kanji` entry since Phase 5's original
+  scaffolding), so kanji mastery, recommendations, and achievement
+  progress just started showing up once the backend had real data for it.
 
 ## Backend
 
@@ -295,6 +332,106 @@ Phase 11 — Achievements (complete)
   `perfectionist`), and `unlocked_at` staying stable across repeated
   requests).
 
+### Phase 12 additions
+
+- `app/repositories/review_schedule_repository.py::ReviewScheduleRepository` —
+  SM-2-inspired spaced repetition, adapted for this app's binary
+  correct/incorrect grading (no 0-5 recall-quality scale exists anywhere
+  in JapJap, unlike Anki). `record_review()`: correct answers grow the
+  interval (1 day → 6 days → interval × ease factor, ease factor nudged
+  up), an incorrect answer resets repetitions to 0, shortens the interval
+  back to 1 day, and nudges ease factor down (floored at 1.3). This is a
+  scheduling signal only — entirely separate from `learner_skills`'
+  mastery tracking (Phase 5); both update from the same answer event but
+  answer different questions ("how well" vs. "when next").
+- `ActivityService._rank_by_due_date` — shared by `generate_quiz` (now
+  takes `user_id`) and the new `get_flashcard_deck`: shuffles the content
+  pool, then stable-sorts by due date ascending (never-reviewed concepts
+  sort first, via a sentinel `UNSEEN_SORT_KEY = datetime.min`). `generate_quiz`
+  takes a prefix slice of the ranked pool (so some content simply won't be
+  selected if the pool is bigger than the requested quiz size — the
+  "repeat avoidance" the user asked for); `get_flashcard_deck` returns the
+  *entire* reordered deck, since flashcard mode is meant to review
+  everything, just smarter-ordered.
+- New `GET /api/activities/flashcards?category=&level=` — same content as
+  `GET /api/vocabulary`/`GET /api/grammar`, personalized order. Those
+  plain content endpoints deliberately stay unordered/unpersonalized;
+  this one is the study-queue equivalent (same "quiz has its own endpoint,
+  raw content has its own" split already established in Phase 3/4).
+- `record_review` calls added alongside every existing `record_result`
+  call site: `ActivityService.submit_quiz`/`complete_flashcards`,
+  `TestService.submit_attempt`, `SpeakingService.submit_attempt`. Scope
+  deliberately excludes reading (mini-story comprehension — a story's
+  concept is a one-off title, not a reusable pool to reorder) and
+  conversation (never had a "concept" to schedule in the first place, see
+  Phase 8) — SRS applies specifically to the three *fixed content pools*
+  a learner draws from repeatedly: vocabulary, grammar, and speaking
+  prompts.
+- Speaking prompt *list ordering* (`GET /api/speech/prompts`) was left
+  unchanged — review data is still recorded on every speaking attempt for
+  future use, but the prompt picker is a manual "choose one to practice"
+  UI, not an auto-generated set the way quiz/flashcards are, so the
+  "don't repeat what you already answered" problem doesn't really apply
+  there the same way.
+- Test tooling: pytest, 147 tests total (added `test_review_schedule.py`:
+  interval progression across 1st/2nd/3rd+ correct answers, the
+  incorrect-answer reset, the ease-factor floor, and never-reviewed
+  concepts being absent from `due_dates_by_concept`; extended
+  `test_activities.py` with the new flashcard-deck endpoint and two
+  ordering tests — a never-reviewed concept beats recently-correct ones in
+  a size-limited quiz, and a freshly-reviewed item sorts to the back of
+  the full flashcard deck).
+
+### Phase 13 additions
+
+- **Sourcing note** (see this phase's Important Decisions for the full
+  reasoning): the *scope* of what's tested at each JLPT level — which
+  kanji, which vocabulary, which grammar points — is publicly documented
+  reference information compiled by the JLPT study community (the Japan
+  Foundation/JEES stopped publishing official lists after 2010), not
+  copyrighted exam content. This phase researched that scope (via web
+  search) and used it to write **original** content — every explanation,
+  example sentence, and example word below is composed for this app, none
+  copied from any textbook, app, or past exam.
+- `app/core/kanji_seed_data.py::KANJI_N5` — 80 real N5 kanji (character,
+  onyomi, kunyomi, meaning, plus an original example word/reading/meaning
+  each), seeded into a new `kanji` collection the same
+  seed-from-code-into-Mongo way as Phase 3's vocabulary/grammar (unlike
+  Phase 8/9's characters/scenarios/speaking prompts, which stayed
+  purely in-code — kanji is a browsable *catalog*, matching vocabulary's
+  precedent, not content referenced by key inside an AI prompt).
+- `app/core/seed_data.py::GRAMMAR_N5` grown from 8 to 38 points — every
+  new entry hand-verified for correct conjugation and a unique `answer`
+  string (no two grammar points share an exact answer text, so quiz
+  distractor options are never accidentally duplicated).
+- **Kanji is now a full third `ActivityCategory`** (`app/schemas/activity.py`),
+  not a bolted-on special case: `app/repositories/kanji_repository.py::KanjiRepository`
+  mirrors `VocabularyRepository` exactly; `ActivityService._content_repo`
+  became a dict-based dispatch across all three repositories;
+  `_QUIZ_FIELDS`/`_ACTIVITY_TYPE_FOR_QUIZ`/`_CONCEPT_FIELDS` gained kanji
+  entries (`character` → `meaning`, multiple-choice, same shape as
+  vocabulary's `term` → `meaning`). New `GET /api/kanji` route mirrors
+  `GET /api/vocabulary`/`GET /api/grammar`.
+- Kanji was added to `RecommendationService.CATEGORIES_SCORED_BY_MASTERY`/
+  `CATEGORY_ACTIONS` (Phase 10) and `AchievementService.WELL_ROUNDED_CATEGORIES`
+  (Phase 11) — both were designed to key off `learner_skills`' category
+  field generically, so adding kanji as a real practice category meant
+  updating these two constants, not the underlying logic.
+  `AchievementService`'s `perfectionist` check needed **no** change at
+  all — it already iterates whatever categories appear in
+  `learner_skills`, so kanji mastery started counting toward it
+  automatically the moment kanji quizzes existed.
+- The Test Engine (Phase 4) deliberately was **not** extended to kanji —
+  `TestCategory` is a separate enum from `ActivityCategory`, and adding a
+  kanji test would mean touching `TestService`/`seed_test_engine`/the test
+  schemas for comparatively little benefit versus quiz+flashcards, which
+  already cover the same "practice this category" need. Scope boundary,
+  not an oversight.
+- Test tooling: pytest, 152 tests total (added kanji listing, kanji quiz
+  generation/submission/skill-feed, and kanji flashcard-deck tests to
+  `test_activities.py`; updated Phase 10/11 tests that had hardcoded the
+  old 5-category assumption now that kanji is a 6th).
+
 ## Database
 
 - Added `mini_stories` (indexed on `level`, `generated_by_user_id`).
@@ -315,6 +452,12 @@ Phase 11 — Achievements (complete)
   content pattern) and `user_achievements` (per-user unlocks, indexed
   unique on `(user_id, achievement_key)` — cleared between tests). See
   [DATABASE.md](DATABASE.md).
+- Added `review_schedule` (per-user spaced-repetition state, unique index
+  on `(user_id, category, concept)`). Tests clean it fully between runs.
+  See [DATABASE.md](DATABASE.md).
+- Added `kanji` (80 seeded N5 items, indexed on `level` — shared reference
+  content like vocabulary/grammar, not cleared between tests). See
+  [DATABASE.md](DATABASE.md).
 
 ## AI
 
@@ -330,10 +473,11 @@ Phase 11 — Achievements (complete)
 
 ## Testing
 
-- Backend: pytest, 137 tests passing (health, config, auth, profile,
-  activities, test engine, learner model/progress, AI tutor, AI content
-  generation, conversation, speech, recommendations, achievements).
-- Frontend: Vitest + React Testing Library, 54 tests passing.
+- Backend: pytest, 152 tests passing (health, config, auth, profile,
+  activities (vocabulary/grammar/kanji), test engine, learner model/progress,
+  AI tutor, AI content generation, conversation, speech, recommendations,
+  achievements, review scheduling).
+- Frontend: Vitest + React Testing Library, 55 tests passing.
 - E2E (Playwright or similar): not yet set up — planned for a later phase.
 - **Manually verified against the real Gemini API** (same non-functional
   local key as Phases 6–7): registered a user, completed onboarding,
@@ -381,6 +525,39 @@ Phase 11 — Achievements (complete)
   genuine cross-phase verification: the achievement state reflects real
   actions taken during Phase 8 and Phase 10's manual testing sessions, not
   fixtures set up for this phase alone.
+- **Phase 12 manually verified end-to-end, and caught a real "is this
+  actually working" moment worth documenting**: opened `/flashcards` on
+  the long-lived test account and the very first card was 学校 — a concept
+  that account had already answered correctly back in Phase 10's testing,
+  which looked like the reordering wasn't working. Investigation (a direct
+  API call) confirmed it was a data-vintage issue, not a bug: that Phase
+  10 quiz submission happened *before* Phase 12 existed, so no
+  `review_schedule` entry was ever created for it — nothing retroactively
+  populates history for a feature that didn't exist yet. Submitting a
+  fresh answer for the same concept and immediately re-fetching the deck
+  confirmed the fix works correctly on live data: it moved from
+  effectively random position to 11th of 12 (the back of the deck), and a
+  full quiz/flashcard/deck round-trip was confirmed in the browser
+  afterward.
+- **Phase 13 manually verified end-to-end with real cross-feature
+  integration**: on the long-lived test account, opened the new "Kanji"
+  tab on `/flashcards` — 80 real kanji loaded, card 1 (北) revealed
+  correct meaning/onyomi/kunyomi/example word. Switched to `/quiz`'s
+  Kanji tab and completed a 5-question quiz (all real kanji, all four
+  options genuinely distinct meanings) at 5/5 correct, +50 XP. Confirmed
+  the result rippled correctly through every downstream feature without
+  any of them being touched directly: `/progress` showed Kanji at 100%
+  mastery; the dashboard's recommendations panel correctly *stopped*
+  recommending kanji (now above the 70% threshold) while still
+  recommending grammar/reading/speaking; `/achievements` showed
+  `century_club` (100 XP) and `perfectionist` (≥90% mastery, ≥5 attempts)
+  newly unlocked with real timestamps. This manual run also caught a real
+  bug: the `well_rounded` achievement's seeded *description* text still
+  listed only the pre-Phase-13 five categories even though its actual
+  unlock *criteria* had been updated to require kanji too — fixed in
+  `achievement_seed_data.py` (a fresh-seeded database picks up the fix;
+  an already-seeded one won't retroactively update, same as any
+  seed-once content change — see Technical Debt).
 
 ## CI/CD
 
@@ -466,6 +643,52 @@ Phase 11 — Achievements (complete)
   `RecommendationService` category list changes (e.g. kanji/listening gain
   practice routes), `AchievementService`'s category set should be
   revisited alongside it for consistency.
+- Historical activity from before Phase 12 shipped has no `review_schedule`
+  entries and never will (nothing retroactively backfills it) — a
+  long-lived account's flashcard/quiz ordering will look partially random
+  until enough fresh answers accumulate real schedule data. Expected, not
+  a bug (see the manual-verification note above), but worth knowing if
+  ordering looks off on an old test account.
+- Speaking prompt *list* ordering (`GET /api/speech/prompts`) doesn't use
+  `review_schedule` yet, even though speaking attempts feed it — the
+  picker is a manual "choose one" UI, not an auto-generated set, so this
+  wasn't in scope for Phase 12. Revisit if the prompt list grows large
+  enough that manual browsing becomes tedious.
+- Reading (mini-story comprehension) and conversation are excluded from
+  spaced repetition entirely — a mini-story's "concept" is the story title
+  (a one-off, not a reusable pool to reorder), and conversation never had
+  a schedulable concept in the first place (Phase 8). SRS only applies to
+  the three genuinely reusable content pools: vocabulary, grammar, and
+  speaking prompts.
+- No UI surfaces spaced-repetition state directly (no "5 cards due today"
+  count, no due-date badge per card) — the *effect* is felt (smarter
+  ordering) but the *mechanism* is invisible. A future pass could expose
+  due counts, e.g. on the dashboard or flashcards page, if that turns out
+  to matter for motivation/transparency.
+- Vocabulary depth is still just 12 items (vs. the ~800-word real N5
+  scope) — Phase 13 deliberately prioritized Kanji (a whole new,
+  previously-unbuilt category) and grammar breadth over vocabulary
+  breadth, given limited time in one phase. Phase 14 is earmarked for
+  vocabulary expansion specifically.
+- Only N5 kanji/grammar exist — N4 through N1 (progressively larger scope:
+  roughly 300/650/1000/2000+ cumulative kanji and correspondingly more
+  vocabulary/grammar per the researched estimates) are unbuilt. Getting a
+  learner all the way to "ready for N1" is a multi-phase content effort,
+  not a single pass.
+- Kanji quizzing only tests meaning (character → English meaning),
+  mirroring vocabulary's format — it doesn't yet quiz on/kunyomi readings
+  separately, which real kanji study usually also drills. Worth adding as
+  a second kanji quiz mode if reading recall turns out to matter more than
+  meaning recognition for learners.
+- The `well_rounded` achievement's seeded description text needed a
+  manual fix alongside the code change that added kanji to its criteria
+  (see the Phase 13 manual-verification note above) — a reminder that
+  `achievement_seed_data.py`'s human-readable text and
+  `achievement_service.py`'s actual unlock logic are two separate sources
+  of truth that must be kept in sync by hand; there's no single place
+  that generates one from the other.
+
+## Important Decisions
 
 - The git repository root is `jap-jap/` nested one level inside the
   `self-project/jap-jap/` folder on disk (pre-existing `git init` + GitHub
@@ -620,14 +843,77 @@ Phase 11 — Achievements (complete)
   as a list; achievements need a single "does *any* category clear this
   bar" boolean) and the computation itself is a few lines, not worth an
   abstraction yet.
+- Phase 12's scheduling algorithm is SM-2-*inspired*, not literal SM-2 —
+  real SM-2 grades recall quality on a 0-5 scale and this app only ever
+  has binary correct/incorrect (no activity anywhere asks "how easily did
+  you recall this"). The two-branch simplification (correct → grow
+  interval + ease; incorrect → reset repetitions, shorten interval, shrink
+  ease) captures the core spaced-repetition behavior — well-known things
+  get shown less, weak things get shown more — without needing a UI
+  concept (a 0-5 self-rating) the rest of the app doesn't have anywhere
+  else.
+- Mastery (`learner_skills`, Phase 5) and scheduling (`review_schedule`,
+  Phase 12) are deliberately two separate collections/repositories/write
+  paths rather than one merged concept, even though both update from the
+  same answer event. They answer different questions for different
+  audiences: mastery is what `/api/progress`, `/api/mistakes`, and
+  `/api/recommendations` show a learner about *how well* they know
+  something; due-date is purely an internal *content-selection* signal a
+  learner never sees directly. Merging them would couple two concerns
+  that may evolve independently (e.g. a future mastery-decay feature
+  shouldn't have to touch scheduling math, and vice versa).
+- `generate_quiz`'s selection is a straightforward "sort by due date, take
+  the first N" rather than a weighted/probabilistic pick — simpler to
+  reason about and test deterministically (given fixed input, the ranking
+  order is fully determined except for the intentional random tie-break
+  among equal-priority items) — the random shuffle before the stable sort
+  already prevents "always the exact same N items" staleness
+  when many concepts are equally new/due.
+- `ActivityService.get_flashcard_deck` returns *every* item in the level,
+  just reordered — unlike `generate_quiz`, which takes a size-limited
+  prefix. Flashcard mode's whole premise is reviewing the full deck; only
+  the *order* should be smarter, not the *completeness*.
+- **JLPT content sourcing (Phase 13):** the Japan Foundation/JEES have
+  never published an official JLPT vocabulary/kanji list (and stopped
+  publishing any official kanji list after 2010) — every study resource
+  (Tanos, JLPTsensei, WaniKani, Migaku, etc.) works from the same
+  reverse-engineered consensus scope, compiled by analyzing real past
+  exams. That scope itself — which ~80 kanji, which ~800 words, which
+  ~grammar points appear at N5 — is factual/reference information, not a
+  copyrightable exam artifact; using it to decide *what* to teach is
+  legitimate and how virtually every JLPT prep product works. What
+  remains off-limits is reproducing actual past-exam questions, reading
+  passages, or other exam-specific compositions verbatim. This phase
+  researched the former (via web search against JLPTsensei/Tanos/
+  community sources) and used it only to decide *scope* — every piece of
+  actual content (kanji example words, grammar example sentences,
+  explanations) was then originally written for this app, the same
+  authorship model Phase 3 already established for vocabulary/grammar.
+- Kanji joined the codebase as a genuine third `ActivityCategory`, not a
+  parallel special-cased feature — same repository shape as vocabulary,
+  same quiz/flashcard dispatch tables, same category-string plumbing
+  through `learner_skills`/`review_schedule`/recommendations/achievements.
+  This is why `RecommendationService` and `AchievementService` needed only
+  small constant updates (add `"kanji"` to a set/dict) rather than new
+  code paths — the category abstraction Phases 5/10/11 already built was
+  designed generically enough to absorb a new category cheaply.
+- Grammar expansion (8 → 38) was curated, not a mechanical dump of every
+  researched grammar point — entries that are grammatical *categories*
+  rather than fill-in-the-blank *patterns* (e.g. "i-adjectives" as a
+  listing, standalone sentence-ending tone particles like ね/よ that need
+  more context than one blank can carry) don't fit this app's
+  sentence-completion format and were deliberately left out in favor of
+  quality/correctness over raw count.
 
 ## Next Phase
 
-Not yet determined. The master prompt's Phase 11 spec fell out of context
-during this session, so Phase 11 (Achievements) was built by inferring
-scope from docs/DATABASE.md's already-planned `achievements`/
-`user_achievements` collections, per explicit user direction — not from
-verbatim master-prompt text. The original spec's actual Phase 11 (if
-different from Achievements) and the rest of the phase list beyond this
-point are unknown from here; paste the master prompt's next section, or
-describe the next phase's scope directly, before continuing.
+Phase 14 — Vocabulary Expansion (grow N5 vocabulary from 12 items toward
+the ~800-word researched scope, likely in batches given the sheer content
+volume, following the same original-content/researched-scope sourcing
+approach established in Phase 13), then Streaks & Daily Goals, XP Levels/
+Ranks, Deeper Badges, and finally Leaderboards/Social per the phase
+sequence agreed with the user. As with Phases 11–13, this sequence is
+built from explicit user direction and scoped-down inference from the
+user's own requests, not verbatim master-prompt text — the original
+master prompt's phase list beyond Phase 10 remains unknown from here;
+paste it if it should take precedence.

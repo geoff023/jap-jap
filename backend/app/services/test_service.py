@@ -3,6 +3,7 @@ from typing import Any
 
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.question_repository import QuestionRepository
+from app.repositories.review_schedule_repository import ReviewScheduleRepository
 from app.repositories.skill_repository import LearnerSkillRepository
 from app.repositories.test_attempt_repository import TestAttemptRepository
 from app.repositories.test_repository import TestRepository
@@ -31,12 +32,14 @@ class TestService:
         attempts: TestAttemptRepository,
         profiles: LearnerProfileRepository,
         skills: LearnerSkillRepository,
+        review_schedule: ReviewScheduleRepository,
     ):
         self._tests = tests
         self._questions = questions
         self._attempts = attempts
         self._profiles = profiles
         self._skills = skills
+        self._review_schedule = review_schedule
 
     async def list_tests(self) -> list[dict[str, Any]]:
         return await self._tests.list_all()
@@ -88,6 +91,9 @@ class TestService:
             # test's — a "mixed" test has no single category to attribute
             # the skill update to.
             await self._skills.record_result(
+                user_id, question["category"], question["concept"], is_correct, now
+            )
+            await self._review_schedule.record_review(
                 user_id, question["category"], question["concept"], is_correct, now
             )
 

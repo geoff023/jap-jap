@@ -29,7 +29,7 @@ async def test_recommendations_nudge_every_untried_category_for_a_new_learner(
     assert response.status_code == 200
     recs = response.json()["recommendations"]
     categories = [r["category"] for r in recs]
-    assert categories == ["vocabulary", "grammar", "reading", "speaking", "conversation"]
+    assert categories == ["vocabulary", "grammar", "kanji", "reading", "speaking", "conversation"]
     for rec in recs:
         assert rec["reason"] == "try_something_new"
         assert rec["mastery"] is None
@@ -52,7 +52,7 @@ async def test_recommendations_flag_weak_mastery_ahead_of_untried_nudges(
     assert "33%" in recs[0]["message"]
     assert recs[0]["action_path"] == "/quiz"
     # The rest are still untried nudges, sorted after the weak entry.
-    assert [r["reason"] for r in recs[1:]] == ["try_something_new"] * 4
+    assert [r["reason"] for r in recs[1:]] == ["try_something_new"] * 5
 
 
 async def test_recommendations_ignore_a_category_with_too_few_attempts(
@@ -81,14 +81,14 @@ async def test_recommendations_treat_conversation_as_tried_once_a_session_exists
 
     recs = response.json()["recommendations"]
     assert not any(r["category"] == "conversation" for r in recs)
-    assert len(recs) == 4
+    assert len(recs) == 5
 
 
 async def test_recommendations_fall_back_to_a_challenge_when_everything_looks_solid(
     client, onboarded_auth_headers
 ):
     user_id = await _user_id(client, onboarded_auth_headers)
-    for category in ["vocabulary", "grammar", "reading", "speaking"]:
+    for category in ["vocabulary", "grammar", "kanji", "reading", "speaking"]:
         for _ in range(3):
             await _record(user_id, category, f"{category}-concept", correct=True)
     await client.post(

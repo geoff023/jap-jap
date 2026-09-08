@@ -1,6 +1,6 @@
 import type { JlptLevel } from './profile'
 
-export type ActivityCategory = 'vocabulary' | 'grammar'
+export type ActivityCategory = 'vocabulary' | 'grammar' | 'kanji'
 
 export interface VocabularyItem {
   id: string
@@ -21,6 +21,18 @@ export interface GrammarConcept {
   example_sentence: string
   example_translation: string
   answer: string
+}
+
+export interface KanjiItem {
+  id: string
+  character: string
+  onyomi: string
+  kunyomi: string
+  meaning: string
+  level: JlptLevel
+  example_word: string | null
+  example_reading: string | null
+  example_meaning: string | null
 }
 
 export interface QuizQuestion {

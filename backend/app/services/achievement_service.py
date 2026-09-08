@@ -11,7 +11,7 @@ from app.repositories.test_attempt_repository import TestAttemptRepository
 
 MIN_ATTEMPTS_FOR_MASTERY_CHECK = 5
 PERFECTIONIST_THRESHOLD = 0.9
-WELL_ROUNDED_CATEGORIES = {"vocabulary", "grammar", "reading", "speaking", "conversation"}
+WELL_ROUNDED_CATEGORIES = {"vocabulary", "grammar", "kanji", "reading", "speaking", "conversation"}
 
 
 class AchievementService:

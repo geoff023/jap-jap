@@ -1,23 +1,28 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { completeFlashcards, fetchGrammar, fetchVocabulary } from '../services/activityApi'
+import { completeFlashcards, fetchFlashcardDeck } from '../services/activityApi'
 import { aiUnavailableMessage, explainGrammar, explainVocabulary } from '../services/aiApi'
 import { useAuthStore } from '../stores/authStore'
 import type {
   ActivityCategory,
   FlashcardReview,
   GrammarConcept,
+  KanjiItem,
   VocabularyItem,
 } from '../types/activity'
 import type { GrammarExplanation, VocabularyExplanation } from '../types/ai'
 
 const LEVEL = 'N5'
 
-type DeckItem = VocabularyItem | GrammarConcept
+type DeckItem = VocabularyItem | GrammarConcept | KanjiItem
 
 function isVocabItem(item: DeckItem): item is VocabularyItem {
   return 'term' in item
+}
+
+function isKanjiItem(item: DeckItem): item is KanjiItem {
+  return 'character' in item
 }
 
 export default function FlashcardsPage() {
@@ -36,10 +41,7 @@ export default function FlashcardsPage() {
 
   const deckQuery = useQuery<DeckItem[]>({
     queryKey: ['flashcards', category],
-    queryFn: () =>
-      category === 'vocabulary'
-        ? fetchVocabulary(token as string, LEVEL)
-        : fetchGrammar(token as string, LEVEL),
+    queryFn: () => fetchFlashcardDeck(token as string, category, LEVEL),
     enabled: Boolean(token),
   })
 
@@ -62,9 +64,11 @@ export default function FlashcardsPage() {
     setAiLoading(true)
     setAiError(null)
     try {
-      const explanation = isVocabItem(current)
-        ? await explainVocabulary(token, current.term, current.example_sentence ?? undefined)
-        : await explainGrammar(token, current.title, current.example_sentence)
+      const explanation = isKanjiItem(current)
+        ? await explainVocabulary(token, current.character, current.example_word ?? undefined)
+        : isVocabItem(current)
+          ? await explainVocabulary(token, current.term, current.example_sentence ?? undefined)
+          : await explainGrammar(token, current.title, current.example_sentence)
       setAiExplanation(explanation)
     } catch (err) {
       setAiError(aiUnavailableMessage(err) ?? 'Could not reach the AI tutor. Please try again.')
@@ -112,7 +116,7 @@ export default function FlashcardsPage() {
         <h1 className="text-2xl font-bold text-slate-800">Flashcards</h1>
 
         <div className="flex gap-2">
-          {(['vocabulary', 'grammar'] as ActivityCategory[]).map((c) => (
+          {(['vocabulary', 'grammar', 'kanji'] as ActivityCategory[]).map((c) => (
             <button
               key={c}
               type="button"
@@ -151,8 +155,32 @@ export default function FlashcardsPage() {
             <p className="text-xs uppercase tracking-wide text-slate-400">
               Card {index + 1} of {deck.length}
             </p>
+            <div className="mx-auto mt-2 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-rose-400 transition-all"
+                style={{ width: `${((index + 1) / deck.length) * 100}%` }}
+              />
+            </div>
 
-            {isVocabItem(current) ? (
+            {isKanjiItem(current) ? (
+              <>
+                <p className="mt-4 text-5xl font-bold text-slate-800">{current.character}</p>
+                {revealed && (
+                  <div className="mt-4 border-t border-slate-100 pt-4">
+                    <p className="text-lg text-rose-600">{current.meaning}</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                      音読み {current.onyomi} ・ 訓読み {current.kunyomi}
+                    </p>
+                    {current.example_word && (
+                      <p className="mt-2 text-sm text-slate-500">
+                        {current.example_word} ({current.example_reading}) —{' '}
+                        {current.example_meaning}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : isVocabItem(current) ? (
               <>
                 <p className="mt-4 text-3xl font-bold text-slate-800">{current.term}</p>
                 <p className="mt-1 text-sm text-slate-500">{current.reading}</p>

@@ -22,9 +22,11 @@ from app.repositories.conversation_repository import (
     ConversationSessionRepository,
 )
 from app.repositories.grammar_repository import GrammarRepository
+from app.repositories.kanji_repository import KanjiRepository
 from app.repositories.mini_story_repository import MiniStoryRepository
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.question_repository import QuestionRepository
+from app.repositories.review_schedule_repository import ReviewScheduleRepository
 from app.repositories.skill_repository import LearnerSkillRepository
 from app.repositories.speaking_repository import SpeakingAttemptRepository
 from app.repositories.test_attempt_repository import TestAttemptRepository
@@ -57,6 +59,10 @@ def get_grammar_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> 
     return GrammarRepository(db)
 
 
+def get_kanji_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> KanjiRepository:
+    return KanjiRepository(db)
+
+
 def get_activity_repository(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> ActivityRepository:
@@ -83,6 +89,12 @@ def get_skill_repository(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> LearnerSkillRepository:
     return LearnerSkillRepository(db)
+
+
+def get_review_schedule_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> ReviewScheduleRepository:
+    return ReviewScheduleRepository(db)
 
 
 def get_ai_interaction_repository(
