@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 13 — Kanji + N5 Grammar Expansion (complete)
+Phase 14 — Vocabulary Expansion (complete)
 
 ## Completed
 
@@ -20,6 +20,7 @@ Phase 13 — Kanji + N5 Grammar Expansion (complete)
 - Phase 11: Achievements — a 10-badge gamification catalog seeded into MongoDB (unlike Phase 8/9's in-code content), deterministic milestone detection across XP/activity/mastery/category-breadth, idempotent unlock-on-read with a stable `unlocked_at`, dedicated Achievements page.
 - Phase 12: Spaced Repetition — SM-2-inspired per-concept scheduling (`review_schedule` collection) for vocabulary, grammar, and speaking; quizzes and the flashcard deck now surface due/never-seen concepts first instead of re-serving whatever was just answered correctly, so a learner stops seeing the same well-known items on repeat.
 - Phase 13: Kanji + N5 Grammar Expansion — a full new Kanji practice category (80 real N5 kanji, quiz + flashcards, fully integrated into the learner model/recommendations/achievements/spaced-repetition) plus N5 grammar grown from 8 to 38 real, verified points, both researched from authoritative community-compiled JLPT scope references (not copied exam content — see this phase's section below for the copyright distinction).
+- Phase 14: Vocabulary Expansion — N5 vocabulary grown from 12 to 117 real, researched words (verbs, adjectives, family, time words, everyday nouns), each with an original example sentence, no duplicate terms or meanings across the whole list — flowing through the exact same quiz/flashcard/Test-Engine plumbing with zero structural changes.
 
 ## Frontend
 
@@ -136,6 +137,15 @@ Phase 13 — Kanji + N5 Grammar Expansion (complete)
   (`CATEGORY_LABELS` already had a `kanji` entry since Phase 5's original
   scaffolding), so kanji mastery, recommendations, and achievement
   progress just started showing up once the backend had real data for it.
+
+### Phase 14 additions
+
+- **Zero frontend changes.** Vocabulary expansion is pure content — the
+  same `GET /api/vocabulary`, `GET /api/activities/quiz`, and
+  `GET /api/activities/flashcards` calls the frontend already made just
+  started returning more/richer data. This is the cleanest possible
+  confirmation that Phase 3's original vocabulary plumbing was built
+  content-agnostic from the start.
 
 ## Backend
 
@@ -432,6 +442,27 @@ Phase 13 — Kanji + N5 Grammar Expansion (complete)
   `test_activities.py`; updated Phase 10/11 tests that had hardcoded the
   old 5-category assumption now that kanji is a 6th).
 
+### Phase 14 additions
+
+- `app/core/seed_data.py::VOCABULARY_N5` grown from 12 to 117 words
+  (verbs, adjectives, family terms, time/calendar words, everyday nouns),
+  same sourcing/authorship model as Phase 13: real words from the
+  researched public N5 scope, original example sentences written for this
+  app. Every `term` and every `meaning` string is unique across the whole
+  117-item list — a real correctness requirement, not just tidiness: a
+  duplicate `meaning` string could produce two visually-identical options
+  in the same multiple-choice quiz question.
+- **Zero backend code changes** — `ActivityService`, `TestService`,
+  `seed_test_engine`, the recommendation/achievement/spaced-repetition
+  integrations all already treated vocabulary generically by content, not
+  by count. Growing the list from 12 to 117 items is the same kind of
+  "just more seed data" change as Phase 13's grammar expansion, and
+  required touching exactly one file (`seed_data.py`) plus one new test.
+- Test tooling: pytest, 153 tests total (added
+  `test_vocabulary_n5_has_no_duplicate_terms_or_meanings`, asserting both
+  the list's size and — more importantly — that no two items share a
+  `term` or `meaning` string).
+
 ## Database
 
 - Added `mini_stories` (indexed on `level`, `generated_by_user_id`).
@@ -458,6 +489,21 @@ Phase 13 — Kanji + N5 Grammar Expansion (complete)
 - Added `kanji` (80 seeded N5 items, indexed on `level` — shared reference
   content like vocabulary/grammar, not cleared between tests). See
   [DATABASE.md](DATABASE.md).
+- No new collection — `vocabulary` (Phase 3) just holds more documents
+  (12 → 117). `questions`/`tests` (Phase 4) are also bigger, since they're
+  derived from `VOCABULARY_N5` at startup, same as every prior content
+  expansion.
+- **A real local-dev gotcha, worth remembering for the next content
+  phase**: `seed_if_empty` (the pattern every seeded collection uses) is,
+  as the name says, a no-op once a collection has *any* documents — so a
+  long-lived local dev/test database that was already seeded from the old
+  12-item list did **not** pick up the new 117 items on its own. Fixed for
+  this session by manually clearing `vocabulary` (12 → 117) and, since
+  they're derived from it, `grammar_concepts`, `questions`, and `tests`
+  too, then restarting the app so `seed_if_empty` ran fresh. This only
+  affects long-lived local/dev databases that predate a seed-data change —
+  CI and any genuinely fresh database are unaffected, since they start
+  empty every time.
 
 ## AI
 
@@ -473,7 +519,7 @@ Phase 13 — Kanji + N5 Grammar Expansion (complete)
 
 ## Testing
 
-- Backend: pytest, 152 tests passing (health, config, auth, profile,
+- Backend: pytest, 153 tests passing (health, config, auth, profile,
   activities (vocabulary/grammar/kanji), test engine, learner model/progress,
   AI tutor, AI content generation, conversation, speech, recommendations,
   achievements, review scheduling).
@@ -558,6 +604,22 @@ Phase 13 — Kanji + N5 Grammar Expansion (complete)
   `achievement_seed_data.py` (a fresh-seeded database picks up the fix;
   an already-seeded one won't retroactively update, same as any
   seed-once content change — see Technical Debt).
+- **Phase 14 manually verified end-to-end, and ran straight into the
+  seed-staleness gotcha this time from the other side**: the local dev
+  database still had the old 12-item vocabulary list after the code
+  change, so `/flashcards` initially showed "Card 1 of 12" instead of
+  117. Diagnosed immediately (same root cause documented in Phase 12's
+  and this phase's own Database notes: `seed_if_empty` never re-seeds a
+  non-empty collection) and fixed by clearing `vocabulary`,
+  `grammar_concepts`, `questions`, and `tests` in the local dev database
+  and restarting — confirmed all four reseeded to the correct new counts
+  (117 / 38 / 155 / 3) before re-verifying. After that: `/flashcards`
+  correctly showed "Card 1 of 117"; a vocabulary quiz question (花)
+  showed four genuinely distinct real-word options; the grammar deck
+  correctly showed "Card 1 of 38" with one of the new (not pre-existing)
+  points on screen. This is the second phase in a row where this exact
+  seed-staleness pattern surfaced during manual verification — see
+  Technical Debt for whether it's worth a longer-term fix.
 
 ## CI/CD
 
@@ -687,6 +749,20 @@ Phase 13 — Kanji + N5 Grammar Expansion (complete)
   `achievement_service.py`'s actual unlock logic are two separate sources
   of truth that must be kept in sync by hand; there's no single place
   that generates one from the other.
+- Vocabulary is still 117 words (vs. the ~800-word real N5 scope) — a
+  meaningful step up from 12, but nowhere near complete. N5 vocabulary
+  completion, or moving on to N4 content, is the natural next content
+  phase whenever content depth becomes the priority again.
+- **`seed_if_empty`'s no-op-on-non-empty behavior has now bitten manual
+  verification twice in a row** (Phase 12's flashcard-ordering check,
+  Phase 14's vocabulary-count check) — both times correctly diagnosed as
+  "not a bug, just a long-lived local database that predates a seed-data
+  change," but both times cost real debugging time before landing on that
+  conclusion. A `--reseed` dev-only CLI flag or script (drop the relevant
+  collections and let `seed_if_empty` repopulate them) would turn a
+  multi-step manual Mongo surgery into one command. Not built yet because
+  each individual occurrence was cheap enough to just fix by hand; worth
+  building if content-authoring phases keep happening regularly.
 
 ## Important Decisions
 
@@ -904,16 +980,33 @@ Phase 13 — Kanji + N5 Grammar Expansion (complete)
   more context than one blank can carry) don't fit this app's
   sentence-completion format and were deliberately left out in favor of
   quality/correctness over raw count.
+- Vocabulary expansion (12 → 117) targeted breadth across categories
+  (verbs, adjectives, family, time words, everyday nouns) rather than
+  working straight down the researched frequency-ordered list — a
+  learner exploring flashcards should encounter variety early, not 100
+  nouns before a single new verb. Deliberately stopped at 117 rather than
+  pushing toward the full ~800-word scope in one pass: that volume of
+  hand-verified original example sentences is genuinely a multi-phase
+  effort, and 117 was judged enough to make the "don't keep seeing the
+  same 12 words" complaint from the original request actually true,
+  without sacrificing per-item quality (correct grammar, unique
+  term/meaning) to rush toward a bigger number.
+- Every new vocabulary `meaning` string was checked for uniqueness against
+  the *entire* list (not just nearby entries) before writing — the same
+  correctness requirement Phase 13's grammar expansion established (no
+  duplicate `answer` strings), because both feed the same
+  "distractors pulled from sibling items" quiz-generation logic in
+  `ActivityService`, where a duplicate string produces two
+  visually-identical options in one question.
 
 ## Next Phase
 
-Phase 14 — Vocabulary Expansion (grow N5 vocabulary from 12 items toward
-the ~800-word researched scope, likely in batches given the sheer content
-volume, following the same original-content/researched-scope sourcing
-approach established in Phase 13), then Streaks & Daily Goals, XP Levels/
-Ranks, Deeper Badges, and finally Leaderboards/Social per the phase
-sequence agreed with the user. As with Phases 11–13, this sequence is
-built from explicit user direction and scoped-down inference from the
-user's own requests, not verbatim master-prompt text — the original
-master prompt's phase list beyond Phase 10 remains unknown from here;
-paste it if it should take precedence.
+Phase 15 — Streaks & Daily Goals, then XP Levels/Ranks, Deeper Badges,
+and finally Leaderboards/Social, per the gamification sequence agreed
+with the user back in Phase 12's scoping conversation. Further content
+depth (completing N5 vocabulary, or starting N4) remains available
+whenever content is prioritized again instead. As with Phases 11–14, this
+sequence is built from explicit user direction and scoped-down inference
+from the user's own requests, not verbatim master-prompt text — the
+original master prompt's phase list beyond Phase 10 remains unknown from
+here; paste it if it should take precedence.

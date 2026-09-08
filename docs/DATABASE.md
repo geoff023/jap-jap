@@ -34,12 +34,13 @@ find-or-create-then-update.
 | `xp` | int | default 0; only changed by `LearnerProfileRepository.increment_xp()` (activity completion), never by onboarding/profile-edit upserts |
 | `created_at`, `updated_at` | datetime (UTC) | |
 
-### `vocabulary` (Phase 3)
+### `vocabulary` (Phase 3, expanded Phase 14)
 
 Managed by `app/repositories/vocabulary_repository.py`. Seeded once at app
 startup from `app/core/seed_data.py` if the collection is empty
-(`VOCABULARY_N5` — 12 original N5 words; no massive content library yet,
-broader coverage is Phase 13's job).
+(`VOCABULARY_N5` — 117 N5 words as of Phase 14, up from the original 12;
+still well short of the ~800-word researched N5 scope — see
+[PROJECT_STATE.md](PROJECT_STATE.md)'s Phase 14 section).
 
 | Field | Type | Notes |
 |---|---|---|

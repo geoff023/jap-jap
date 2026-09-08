@@ -159,7 +159,9 @@ learner hasn't completed onboarding yet (`POST /api/onboarding` first),
 ### `GET /api/vocabulary`
 
 Requires `Authorization: Bearer <token>`. Returns vocabulary items, optionally
-filtered by `?level=N5`.
+filtered by `?level=N5`. N5 has 117 items as of Phase 14 (up from the
+original 12) — see [PROJECT_STATE.md](PROJECT_STATE.md)'s Phase 14 section
+for content sourcing.
 
 ```json
 [

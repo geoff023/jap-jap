@@ -14,6 +14,21 @@ async def test_list_vocabulary_returns_seeded_items(client, auth_headers, seed_c
     assert {"term", "reading", "meaning"} <= items[0].keys()
 
 
+async def test_vocabulary_n5_has_no_duplicate_terms_or_meanings(client, auth_headers, seed_content):
+    # Phase 14 grew this list substantially (12 -> 117) — a duplicate
+    # "meaning" string would risk two visually-identical options in the
+    # same quiz question, so this is a real correctness check, not just a
+    # content-count assertion.
+    response = await client.get("/api/vocabulary", params={"level": "N5"}, headers=auth_headers)
+
+    items = response.json()
+    assert len(items) >= 100
+    terms = [item["term"] for item in items]
+    meanings = [item["meaning"] for item in items]
+    assert len(terms) == len(set(terms))
+    assert len(meanings) == len(set(meanings))
+
+
 async def test_list_grammar_returns_seeded_items(client, auth_headers, seed_content):
     response = await client.get("/api/grammar", params={"level": "N5"}, headers=auth_headers)
 
