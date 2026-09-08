@@ -295,8 +295,14 @@ kanji
 progress_events
 achievements
 user_achievements
-recommendations
 ```
+
+Note: `recommendations` was on this list before Phase 10, but the phase
+deliberately didn't introduce it — recommendations are computed fresh from
+`learner_skills`/`conversation_sessions` on every request, the same
+"never store what can be computed live" principle used for mastery/progress
+throughout the learner model since Phase 5. See
+[PROJECT_STATE.md](PROJECT_STATE.md)'s Phase 10 Important Decisions.
 
 ## Indexes
 

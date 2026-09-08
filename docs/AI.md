@@ -113,7 +113,13 @@ direction: Gemini is asked only to *transcribe* audio into text, never to
 judge pronunciation quality itself — `SpeakingService` does the actual
 correct/incorrect determination deterministically (a similarity threshold
 against the target text), the same "AI produces, backend decides" split as
-every other feature.
+every other feature. **Phase 10's recommendation engine goes a step
+further and involves no Gemini call whatsoever** — deciding what a learner
+should practice next is exactly the "deterministic ranking" this section
+reserves for backend logic (see
+[ARCHITECTURE.md](ARCHITECTURE.md)'s Product Model); `RecommendationService`
+reads `learner_skills`/`conversation_sessions` and applies fixed
+thresholds, nothing AI-generated about it.
 
 ## Graceful Degradation
 

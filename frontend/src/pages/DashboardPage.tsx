@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { logout } from '../services/authApi'
 import { ApiError } from '../services/httpErrors'
 import { fetchProfile, updateProfile } from '../services/profileApi'
+import { fetchRecommendations } from '../services/recommendationsApi'
 import { useAuthStore } from '../stores/authStore'
 import { LEARNING_GOALS, PRACTICE_LEVELS } from '../types/profile'
 import type { PracticeLevel } from '../types/profile'
@@ -18,6 +19,12 @@ export default function DashboardPage() {
     queryFn: () => fetchProfile(token as string),
     enabled: Boolean(token),
     retry: false,
+  })
+
+  const recommendationsQuery = useQuery({
+    queryKey: ['recommendations'],
+    queryFn: () => fetchRecommendations(token as string),
+    enabled: Boolean(token),
   })
 
   async function handleLogout() {
@@ -53,6 +60,25 @@ export default function DashboardPage() {
         <span className="rounded-full bg-amber-100 px-4 py-1.5 text-sm font-semibold text-amber-800">
           ⭐ {profile.xp} XP
         </span>
+      )}
+
+      {profile && recommendationsQuery.data && recommendationsQuery.data.recommendations.length > 0 && (
+        <div className="w-full max-w-md rounded-2xl border border-sky-200 bg-sky-50 p-5 text-left shadow-sm">
+          <h2 className="text-sm font-semibold text-sky-800">Recommended for you</h2>
+          <div className="mt-3 flex flex-col gap-3">
+            {recommendationsQuery.data.recommendations.map((rec, index) => (
+              <div key={`${rec.category ?? 'challenge'}-${index}`} className="flex items-center justify-between gap-3">
+                <p className="text-sm text-slate-700">{rec.message}</p>
+                <Link
+                  to={rec.action_path}
+                  className="shrink-0 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-700"
+                >
+                  {rec.action_label}
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {profile && (

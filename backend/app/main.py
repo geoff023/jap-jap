@@ -14,6 +14,7 @@ from app.api.mistakes import router as mistakes_router
 from app.api.onboarding import router as onboarding_router
 from app.api.profile import router as profile_router
 from app.api.progress import router as progress_router
+from app.api.recommendations import router as recommendations_router
 from app.api.speech import router as speech_router
 from app.api.tests import router as tests_router
 from app.api.users import router as users_router
@@ -102,6 +103,7 @@ app.include_router(ai_router, prefix="/api/ai", tags=["ai"])
 app.include_router(ai_generation_router, prefix="/api/ai", tags=["ai-generation"])
 app.include_router(conversation_router, prefix="/api/conversation", tags=["conversation"])
 app.include_router(speech_router, prefix="/api/speech", tags=["speech"])
+app.include_router(recommendations_router, prefix="/api/recommendations", tags=["recommendations"])
 
 
 @app.get("/")

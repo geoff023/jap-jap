@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../services/httpErrors'
 import * as profileApi from '../services/profileApi'
+import * as recommendationsApi from '../services/recommendationsApi'
 import { useAuthStore } from '../stores/authStore'
 import type { LearnerProfile } from '../types/profile'
 import DashboardPage from './DashboardPage'
@@ -42,6 +43,7 @@ describe('DashboardPage', () => {
   beforeEach(() => {
     useAuthStore.setState({ token: 'a-token', user: testUser, isAuthenticated: true })
     vi.restoreAllMocks()
+    vi.spyOn(recommendationsApi, 'fetchRecommendations').mockResolvedValue({ recommendations: [] })
   })
 
   it('redirects to onboarding when no profile exists yet', async () => {
@@ -73,5 +75,42 @@ describe('DashboardPage', () => {
     await user.click(screen.getByRole('button', { name: 'N2' }))
 
     expect(profileApi.updateProfile).toHaveBeenCalledWith('a-token', { preferred_level: 'N2' })
+  })
+
+  it('shows recommendations with a link to act on them', async () => {
+    vi.spyOn(profileApi, 'fetchProfile').mockResolvedValue(testProfile)
+    vi.spyOn(recommendationsApi, 'fetchRecommendations').mockResolvedValue({
+      recommendations: [
+        {
+          category: 'vocabulary',
+          reason: 'weak_mastery',
+          message: 'Your vocabulary mastery is 33% — review some flashcards or try another quiz.',
+          mastery: 0.33,
+          action_label: 'Practice vocabulary',
+          action_path: '/quiz',
+        },
+      ],
+    })
+
+    renderDashboard()
+
+    expect(await screen.findByText('Recommended for you')).toBeInTheDocument()
+    expect(
+      screen.getByText('Your vocabulary mastery is 33% — review some flashcards or try another quiz.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Practice vocabulary' })).toHaveAttribute(
+      'href',
+      '/quiz',
+    )
+  })
+
+  it('shows no recommendations panel when there is nothing to recommend', async () => {
+    vi.spyOn(profileApi, 'fetchProfile').mockResolvedValue(testProfile)
+    vi.spyOn(recommendationsApi, 'fetchRecommendations').mockResolvedValue({ recommendations: [] })
+
+    renderDashboard()
+
+    await screen.findByText('Anime / manga, JLPT')
+    expect(screen.queryByText('Recommended for you')).not.toBeInTheDocument()
   })
 })

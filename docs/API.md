@@ -766,6 +766,50 @@ unsupported audio format, no audio data, or a file over 5 MB, `503 Service
 Unavailable` if no `STT_API_KEY` is configured, `502 Bad Gateway` if the
 speech provider fails or returns something that doesn't validate.
 
+### `GET /api/recommendations`
+
+Requires `Authorization: Bearer <token>`. Returns a deterministic,
+non-AI-generated "what to practice next" list — see [AI.md](AI.md) for why
+this stays out of Gemini's hands entirely. No onboarding required (a
+brand-new learner still gets useful nudges toward every category).
+
+```json
+{
+  "recommendations": [
+    {
+      "category": "grammar",
+      "reason": "weak_mastery",
+      "message": "Your grammar mastery is 42% — a bit of review could help.",
+      "mastery": 0.42,
+      "action_label": "Practice grammar",
+      "action_path": "/quiz"
+    },
+    {
+      "category": "conversation",
+      "reason": "try_something_new",
+      "message": "Start a conversation with an AI character to practice real dialogue.",
+      "mastery": null,
+      "action_label": "Start a conversation",
+      "action_path": "/conversation"
+    }
+  ]
+}
+```
+
+`reason` is one of:
+
+* `"weak_mastery"` — the category has ≥3 combined attempts and mastery
+  below 70%
+* `"try_something_new"` — the category has never been attempted
+* `"challenge"` — a fallback shown only when every category already looks
+  solid (`category` is `null`, points at `/tests`)
+
+At most one recommendation per category (`vocabulary`, `grammar`,
+`reading`, `speaking`, `conversation` — `kanji`/`listening` are excluded,
+having no practice route yet), sorted weakest-mastery-first, untried
+nudges after. Never empty — the `"challenge"` fallback guarantees at least
+one entry.
+
 ## Planned Routes (added phase by phase)
 
 These are not implemented yet — listed here to reflect the intended surface
@@ -774,7 +818,6 @@ as the project grows:
 | Route | Phase |
 |---|---|
 | `/api/kanji` | 13 |
-| `/api/recommendations` | 10 |
 
 Each route follows `routes → services → repositories → MongoDB`; see
 [ARCHITECTURE.md](ARCHITECTURE.md).

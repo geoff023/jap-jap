@@ -24,6 +24,12 @@ AI (Gemini) enhances this loop — explanations, conversation, content
 generation, feedback — but deterministic logic (scoring, XP, mastery,
 recommendation ranking) always lives in backend services, never in the AI.
 
+The loop is fully closed as of Phase 10: `app/services/recommendation_service.py`
+reads the learner model (`learner_skills` + `conversation_sessions`) and
+produces the "Adaptive Recommendation" step entirely in backend logic — no
+Gemini call involved, consistent with the rule above. See [AI.md](AI.md)
+and [PROJECT_STATE.md](PROJECT_STATE.md)'s Phase 10 section.
+
 ## Backend Layering
 
 ```

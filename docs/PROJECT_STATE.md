@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 9 — Speech-to-Text (complete)
+Phase 10 — Adaptive Recommendations (complete)
 
 ## Completed
 
@@ -16,6 +16,7 @@ Phase 9 — Speech-to-Text (complete)
 - Phase 7: AI Content Generation — supplementary AI-generated vocabulary/grammar questions, mini stories, comprehension questions; all validated and stored.
 - Phase 8: Text Conversation — roleplay conversation sessions with AI characters across 3 scenarios (ramen shop, convenience store, train station), full history threading for scenario consistency, conversation history view.
 - Phase 9: Speech-to-Text — `SpeechToTextService` abstraction (`GeminiSTTProvider` implementation), pronunciation practice against 9 curated target phrases (N5–N1), browser microphone recording, similarity-based scoring, first real data source for the `speaking` learner-model category.
+- Phase 10: Adaptive Recommendations — deterministic "what to practice next" engine reading the learner model, surfaced as a "Recommended for you" panel on the dashboard; closes the `Learning → Practice → Assessment → Learner Model → Weakness Detection → Adaptive Recommendation` loop from [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Frontend
 
@@ -71,6 +72,18 @@ Phase 9 — Speech-to-Text (complete)
   to test the actual recording state machine — plus
   `SpeakingPracticePage.test.tsx` and `SpeakingHistoryPage.test.tsx`, which
   mock the hook itself rather than the browser APIs it wraps).
+
+### Phase 10 additions
+
+- `src/services/recommendationsApi.ts`, `src/types/recommendations.ts` —
+  client for `GET /api/recommendations`.
+- No new page — recommendations surface as a "Recommended for you" panel
+  on `DashboardPage` itself (between the XP badge and the practice tile
+  grid), since "what should I do next" belongs at the point where a
+  learner is already deciding what to practice, not behind another click.
+- Test tooling: Vitest + RTL, 53 tests total (added two `DashboardPage`
+  cases: the panel renders a recommendation with a working action link,
+  and it renders nothing when there's nothing to recommend).
 
 ## Backend
 
@@ -193,6 +206,41 @@ Phase 9 — Speech-to-Text (complete)
   format 422, 502/503 provider-failure paths, and the `speaking` skill
   feed-through).
 
+### Phase 10 additions
+
+- `app/services/recommendation_service.py::RecommendationService` — pure
+  deterministic logic, no AI/Gemini call at all (matches
+  [ARCHITECTURE.md](ARCHITECTURE.md)'s "deterministic ranking always lives
+  in backend logic" rule). Reads `learner_skills` (already computed by
+  every prior phase's scoring) plus `conversation_sessions` (since
+  conversation deliberately never writes to `learner_skills`, see Phase 8)
+  and produces at most one recommendation per practiceable category
+  (`vocabulary`, `grammar`, `reading`, `speaking`, `conversation` — `kanji`
+  and `listening` are excluded, since neither has an implemented practice
+  route to link to yet): `"weak_mastery"` if a category has ≥3 combined
+  attempts and mastery < 70%, `"try_something_new"` if it's never been
+  attempted at all, or nothing if it's already in good shape. Falls back
+  to a single `"challenge"` recommendation (pointing at `/tests`) when
+  every category looks solid, so the endpoint never returns an empty list
+  with nothing actionable.
+- `app/schemas/recommendations.py` — `RecommendationEntry`
+  (`category`/`reason`/`message`/`mastery`/`action_label`/`action_path`)
+  and `RecommendationsResponse`.
+- `app/api/recommendations.py` — `GET /api/recommendations`. No onboarding
+  required (matches `/api/progress`/`/api/mistakes` — a brand-new learner
+  with no profile yet still gets useful "try something new" nudges for
+  every category).
+- No new collection — recommendations are computed fresh on every request
+  from existing data, the same "never store what can be computed live"
+  principle used for mastery/progress/mistakes throughout the learner
+  model (Phase 5).
+- Test tooling: pytest, 127 tests total (added `test_recommendations.py`:
+  untried nudges for a brand-new learner, weak-mastery detection sorted
+  ahead of untried nudges, the too-few-attempts edge case correctly
+  produces no recommendation, conversation correctly treated as "tried"
+  once a session exists, and the challenge fallback when every category
+  looks solid).
+
 ## Database
 
 - Added `mini_stories` (indexed on `level`, `generated_by_user_id`).
@@ -223,10 +271,10 @@ Phase 9 — Speech-to-Text (complete)
 
 ## Testing
 
-- Backend: pytest, 121 tests passing (health, config, auth, profile,
+- Backend: pytest, 127 tests passing (health, config, auth, profile,
   activities, test engine, learner model/progress, AI tutor, AI content
-  generation, conversation, speech).
-- Frontend: Vitest + React Testing Library, 51 tests passing.
+  generation, conversation, speech, recommendations).
+- Frontend: Vitest + React Testing Library, 53 tests passing.
 - E2E (Playwright or similar): not yet set up — planned for a later phase.
 - **Manually verified against the real Gemini API** (same non-functional
   local key as Phases 6–7): registered a user, completed onboarding,
@@ -253,6 +301,18 @@ Phase 9 — Speech-to-Text (complete)
   502 from the invalid local key) and, per the design, that no
   `speaking_attempts` document is written when transcription fails (`GET
   /api/speech/attempts` stayed empty afterward).
+- **Phase 10 manually verified end-to-end against real data**: logged in
+  as the same account used across Phases 8–9 (which already had a
+  conversation session, but no vocabulary/grammar/reading/speaking
+  activity), confirmed the dashboard's "Recommended for you" panel showed
+  untried-nudges for vocabulary/grammar/reading/speaking and correctly
+  *excluded* conversation (since a session already existed); clicked
+  "Practice vocabulary" and confirmed it navigated to `/quiz`; completed a
+  5-question vocabulary quiz (4/5 correct, 80% mastery) and returned to
+  the dashboard — vocabulary's recommendation was gone entirely (mastery
+  ≥ 70% threshold), while grammar/reading/speaking remained. This
+  confirms the full loop closes correctly against a real backend and real
+  learner-model data, not just fixtures.
 
 ## CI/CD
 
@@ -306,6 +366,21 @@ Phase 9 — Speech-to-Text (complete)
   still verified end-to-end via a direct HTTP request with synthetic audio
   bytes. Worth a manual check in a real desktop browser before relying on
   this feature being fully working.
+- Recommendations only cover `vocabulary`, `grammar`, `reading`,
+  `speaking`, and `conversation` — `kanji` and `listening` have no
+  implemented practice route, so nothing would happen if a learner clicked
+  a recommendation for them. Once either phase lands, add it to
+  `CATEGORIES_SCORED_BY_MASTERY`/`CATEGORY_ACTIONS` in
+  `recommendation_service.py`.
+- The recommendation engine is a single flat pass over category-level
+  mastery — it doesn't recommend a specific *concept* within a weak
+  category (e.g. "review 食べる specifically"), only "practice vocabulary
+  in general." `/api/mistakes` already exists for concept-level detail;
+  a future iteration could cross-reference it for sharper recommendations.
+- No persistence of past recommendations (no "recommended X, learner
+  ignored it 3 times" tracking) — every request recomputes fresh from
+  current data. Fine for an MVP; would matter if recommendation *ranking*
+  itself needed to improve from engagement signal later.
 
 ## Important Decisions
 
@@ -395,10 +470,37 @@ Phase 9 — Speech-to-Text (complete)
   deterministic correct/incorrect check (the similarity threshold), unlike
   open-ended conversation, so it belongs in the "verified learning" XP
   tier, not the lower "activity volume" tier.
+- Recommendations are computed fresh on every `GET /api/recommendations`
+  call rather than persisted to a `recommendations` collection (which
+  DATABASE.md's original planned-collections list anticipated) — the same
+  "mastery is always computed on read, never stored" principle used
+  throughout the learner model since Phase 5 (`learner_model_service.py`)
+  applies just as well here: there's no staleness to manage, and nothing
+  yet needs a history of past recommendations.
+- `RecommendationService` is entirely Gemini-free — recommending *what* to
+  practice next is exactly the "deterministic ranking" the architecture
+  reserves for backend logic, never AI (see
+  [ARCHITECTURE.md](ARCHITECTURE.md)'s Product Model). AI stays confined
+  to *content* (explanations, generation, conversation, transcription);
+  deciding what a learner should do next is scoring logic, not creative
+  generation.
+- Conversation's "has this been tried" check queries `conversation_sessions`
+  directly (`ConversationSessionRepository.list_by_user(..., limit=1)`)
+  rather than `learner_skills.has_data`, because Phase 8 deliberately never
+  writes conversation turns to `learner_skills` — using `has_data` for
+  conversation would have permanently recommended it even to a learner
+  who'd already had a dozen conversations.
+- A category can produce at most one recommendation (either weak or
+  untried, never both — the two conditions are mutually exclusive by
+  definition), which naturally bounds the list to 5 entries without any
+  separate "top N" capping logic.
+- Recommendations surface on the Dashboard, not a dedicated `/recommendations`
+  page — "what should I practice next" is a landing-moment decision, not a
+  feature a learner navigates *to*; ProgressPage remains the place for
+  mastery detail, Dashboard is where action happens.
 
 ## Next Phase
 
-Phase 10 — Adaptive Recommendations (weakness detection from the learner
-model feeding a "what to practice next" recommendation engine, closing the
-`Learning → Practice → Assessment → Learner Model → Weakness Detection →
-Adaptive Recommendation` loop from [ARCHITECTURE.md](ARCHITECTURE.md))
+Phase 11 — the next unbuilt phase from the master spec (not yet
+determined at time of writing; check with the user or the original master
+prompt for exact scope before starting).
