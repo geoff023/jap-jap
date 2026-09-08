@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 8 — Text Conversation (complete)
+Phase 9 — Speech-to-Text (complete)
 
 ## Completed
 
@@ -15,6 +15,7 @@ Phase 8 — Text Conversation (complete)
 - Phase 6: Gemini AI Tutor — AIService → GeminiService, grammar/vocabulary/mistake explanations, structured + Pydantic-validated, mocked in all tests.
 - Phase 7: AI Content Generation — supplementary AI-generated vocabulary/grammar questions, mini stories, comprehension questions; all validated and stored.
 - Phase 8: Text Conversation — roleplay conversation sessions with AI characters across 3 scenarios (ramen shop, convenience store, train station), full history threading for scenario consistency, conversation history view.
+- Phase 9: Speech-to-Text — `SpeechToTextService` abstraction (`GeminiSTTProvider` implementation), pronunciation practice against 9 curated target phrases (N5–N1), browser microphone recording, similarity-based scoring, first real data source for the `speaking` learner-model category.
 
 ## Frontend
 
@@ -49,6 +50,27 @@ Phase 8 — Text Conversation (complete)
 - Test tooling: Vitest + RTL, 41 tests total (added
   `ConversationScenariosPage.test.tsx`, `ConversationChatPage.test.tsx`,
   `ConversationHistoryPage.test.tsx`).
+
+### Phase 9 additions
+
+- `src/hooks/useAudioRecorder.ts` — wraps `navigator.mediaDevices.getUserMedia`
+  + `MediaRecorder` behind a small `{ status, audioBlob, start, stop, reset }`
+  interface (`status` is `idle | recording | stopped | unsupported | denied`)
+  so pages don't touch browser recording APIs directly, and so page-level
+  tests can mock the hook instead of the whole Web Audio/MediaRecorder stack.
+- `src/services/speechApi.ts`, `src/types/speech.ts` — client for the three
+  `/api/speech/*` endpoints; `submitSpeakingAttempt` uploads the recorded
+  audio as `multipart/form-data`, unlike every other API call so far which
+  is JSON.
+- New pages: `SpeakingPracticePage` (`/speaking` — pick a JLPT level, pick a
+  target phrase, record, submit, see the transcript/match%/XP),
+  `SpeakingHistoryPage` (`/speaking/history` — past attempts).
+- Dashboard's practice grid grew to 8 tiles: added Speaking (🎤).
+- Test tooling: Vitest + RTL, 51 tests total (added
+  `useAudioRecorder.test.ts` — mocks `MediaRecorder`/`getUserMedia` globally
+  to test the actual recording state machine — plus
+  `SpeakingPracticePage.test.tsx` and `SpeakingHistoryPage.test.tsx`, which
+  mock the hook itself rather than the browser APIs it wraps).
 
 ## Backend
 
@@ -131,6 +153,46 @@ Phase 8 — Text Conversation (complete)
   accumulation across turns** — the scenario-consistency test — ownership
   checks, and the 404/502 error paths).
 
+### Phase 9 additions
+
+- `app/speech/base.py` — new `SpeechToTextService` ABC (mirrors
+  `AIService`, deliberately a separate hierarchy — see
+  [ARCHITECTURE.md](ARCHITECTURE.md)'s Speech Abstraction) + `SpeechServiceError`.
+  `app/speech/gemini_provider.py::GeminiSTTProvider` implements it by
+  sending the uploaded audio bytes to Gemini 2.0 Flash (which accepts audio
+  input directly) and parsing a `{"transcript": "..."}` JSON response the
+  same Gemini → JSON → Pydantic-validate way as every other Gemini call in
+  the app — no new AI vendor/SDK needed for speech.
+- `app/core/speaking_data.py` — 9 curated target phrases (4×N5, 2×N4,
+  1×N3, 1×N2, 1×N1), static in code for the same reason as Phase 8's
+  `conversation_data.py`: a phrase and its "correct" target text can never
+  drift apart.
+- `app/repositories/speaking_repository.py::SpeakingAttemptRepository` +
+  `app/services/speaking_service.py::SpeakingService` — transcribes the
+  upload, normalizes and compares it to the target phrase via
+  `difflib.SequenceMatcher` (similarity ≥ 0.8 counts as correct — tolerant
+  of STT noise, not an exact-match requirement), persists the attempt only
+  after transcription succeeds (same failure-ordering lesson learned in
+  Phase 8), feeds `learner_skills` with `category: "speaking"`, and awards
+  a flat 10 XP for a correct attempt (matches quiz/test XP — unlike
+  conversation, pronunciation *does* have a correct-answer check).
+- `app/api/speech.py` — `GET /api/speech/prompts`, `GET /api/speech/attempts`,
+  `POST /api/speech/attempts` (multipart upload: `audio` file + `prompt_key`
+  form field; validates content-type against an allowlist and a 5 MB size
+  cap before ever calling the speech provider). Prompt/attempt browsing
+  needs no onboarding; submitting an attempt (XP-earning) does.
+- New `Settings.stt_api_key`/`stt_enabled` (already scaffolded since
+  Phase 0) now actually gates `get_stt_service` — configured independently
+  of `GEMINI_API_KEY`, even though the default provider happens to also
+  call Gemini under the hood.
+- Added `python-multipart` dependency (required by FastAPI's
+  `UploadFile`/`Form` — nothing before Phase 9 needed file uploads).
+- Test tooling: pytest, 121 tests total (added `test_speech.py`: prompt
+  listing/level-filtering, onboarding requirement, correct/incorrect
+  scoring, punctuation-tolerant matching, unknown-prompt 404, unsupported-
+  format 422, 502/503 provider-failure paths, and the `speaking` skill
+  feed-through).
+
 ## Database
 
 - Added `mini_stories` (indexed on `level`, `generated_by_user_id`).
@@ -144,6 +206,8 @@ Phase 8 — Text Conversation (complete)
 - Added `conversation_sessions` (indexed on `user_id`) and
   `conversation_messages` (indexed on `session_id`). Tests clean both
   fully between runs. See [DATABASE.md](DATABASE.md).
+- Added `speaking_attempts` (indexed on `user_id`). Tests clean it fully
+  between runs. See [DATABASE.md](DATABASE.md).
 
 ## AI
 
@@ -152,14 +216,17 @@ Phase 8 — Text Conversation (complete)
 
 ## Speech
 
-- Not implemented. Unchanged.
+- Implemented (Phase 9) — see [ARCHITECTURE.md](ARCHITECTURE.md)'s Speech
+  Abstraction and [AI.md](AI.md)'s Phase 9 section for the
+  `SpeechToTextService` → `GeminiSTTProvider` pipeline, scoring approach,
+  and testing notes.
 
 ## Testing
 
-- Backend: pytest, 108 tests passing (health, config, auth, profile,
+- Backend: pytest, 121 tests passing (health, config, auth, profile,
   activities, test engine, learner model/progress, AI tutor, AI content
-  generation, conversation).
-- Frontend: Vitest + React Testing Library, 41 tests passing.
+  generation, conversation, speech).
+- Frontend: Vitest + React Testing Library, 51 tests passing.
 - E2E (Playwright or similar): not yet set up — planned for a later phase.
 - **Manually verified against the real Gemini API** (same non-functional
   local key as Phases 6–7): registered a user, completed onboarding,
@@ -174,6 +241,18 @@ Phase 8 — Text Conversation (complete)
   prompt's history — fixed by reordering `ConversationService.send_message`
   to persist only after the reply succeeds (verified in the same manual
   session: a second failed send left the message count unchanged).
+- **Phase 9 manually verified end-to-end**, working around the sandboxed
+  browser's blocked microphone access: logged in, browsed `/speaking`,
+  confirmed the 9 target phrases and level filtering render correctly, and
+  confirmed the recording UI's `denied` path renders correctly when the
+  browser blocks `getUserMedia` (a real permission-denial path, not a
+  mock). Since real microphone audio couldn't be captured in this sandbox,
+  the actual `POST /api/speech/attempts` upload-and-transcribe flow was
+  exercised directly over HTTP with a synthetic audio file — confirmed the
+  request genuinely reaches Gemini (visible in the backend log as a real
+  502 from the invalid local key) and, per the design, that no
+  `speaking_attempts` document is written when transcription fails (`GET
+  /api/speech/attempts` stayed empty afterward).
 
 ## CI/CD
 
@@ -207,6 +286,26 @@ Phase 8 — Text Conversation (complete)
 - No way to end/delete a conversation session — sessions accumulate
   indefinitely in the history list; acceptable for now since browsing is
   free and there's no per-session cost beyond storage.
+- Only 9 speaking prompts exist (curated, in-code), all fixed sentences —
+  no AI-generated pronunciation prompts yet (unlike Phase 7's vocabulary/
+  grammar questions), and no per-word pronunciation feedback, only
+  whole-phrase similarity. A learner will exhaust the prompt list quickly;
+  revisit if that turns out to feel limited.
+- Speaking similarity scoring (`difflib.SequenceMatcher`, threshold 0.8) is
+  a simple text-similarity heuristic, not real pronunciation/phonetic
+  analysis — it can't tell a mispronounced-but-correctly-transcribed word
+  from a well-pronounced one, since Gemini's transcription already
+  "corrects" minor mispronunciations to standard spelling. Good enough for
+  an MVP; a dedicated pronunciation-scoring provider would be a bigger,
+  separate feature.
+- No live browser verification of actual microphone capture — the
+  sandboxed browser environment used for manual verification blocks
+  `getUserMedia`, so the recording UI was only confirmed to fail
+  gracefully (the `denied` path), not to successfully capture and submit
+  real audio in a real browser. The upload-and-transcribe flow itself was
+  still verified end-to-end via a direct HTTP request with synthetic audio
+  bytes. Worth a manual check in a real desktop browser before relying on
+  this feature being fully working.
 
 ## Important Decisions
 
@@ -265,9 +364,41 @@ Phase 8 — Text Conversation (complete)
   (10/correct answer) since sending a message requires no correctness check
   — keeps the XP economy weighted toward verified learning, not just
   activity volume.
+- The default `SpeechToTextService` implementation (`GeminiSTTProvider`)
+  reuses Gemini itself (via `google-genai`, same as `GeminiService`) rather
+  than integrating a dedicated speech vendor (Google Cloud Speech-to-Text,
+  Whisper, etc.) — Gemini 2.0 Flash already accepts audio input, so this
+  avoids a second paid AI vendor/SDK and keeps contributor setup to one
+  ecosystem. `STT_API_KEY` stays a distinct setting from `GEMINI_API_KEY`
+  (per [ARCHITECTURE.md](ARCHITECTURE.md)'s original Speech Abstraction
+  design) so speech features can still be toggled independently — a future
+  phase could swap in a different `STTProvider` without touching
+  `SpeakingService` or the API layer.
+- Speaking prompts (Phase 9) are a static, in-code roster
+  (`app/core/speaking_data.py`), same rationale as Phase 8's
+  characters/scenarios — small and curated enough that a phrase and its
+  target text can never drift apart, and no seeding/migration needed to
+  add more later.
+- Pronunciation correctness uses a similarity *threshold* (0.8 via
+  `difflib.SequenceMatcher`), not exact string match — Gemini's
+  transcription of real speech rarely matches the target byte-for-byte
+  even when pronunciation was fine (optional particles, punctuation).
+  Normalizing out whitespace/punctuation before comparing further reduces
+  false negatives from formatting alone rather than pronunciation.
+- `SpeakingService.submit_attempt` persists the attempt only *after*
+  transcription succeeds — applying the Phase 8 lesson (see above) from
+  the start this time, rather than discovering the same bug again.
+  Verified live: a failed transcription leaves zero trace in
+  `speaking_attempts`.
+- A correct speaking attempt earns the same 10 XP as a quiz/test correct
+  answer (not 3, like conversation) — pronunciation practice *does* have a
+  deterministic correct/incorrect check (the similarity threshold), unlike
+  open-ended conversation, so it belongs in the "verified learning" XP
+  tier, not the lower "activity volume" tier.
 
 ## Next Phase
 
-Phase 9 — Speech-to-Text (pronunciation practice, `SpeechToTextService`
-abstraction mirroring `AIService`, speaking attempts, integration with the
-`speaking` learner-model category)
+Phase 10 — Adaptive Recommendations (weakness detection from the learner
+model feeding a "what to practice next" recommendation engine, closing the
+`Learning → Practice → Assessment → Learner Model → Weakness Detection →
+Adaptive Recommendation` loop from [ARCHITECTURE.md](ARCHITECTURE.md))

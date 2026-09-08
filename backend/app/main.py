@@ -14,6 +14,7 @@ from app.api.mistakes import router as mistakes_router
 from app.api.onboarding import router as onboarding_router
 from app.api.profile import router as profile_router
 from app.api.progress import router as progress_router
+from app.api.speech import router as speech_router
 from app.api.tests import router as tests_router
 from app.api.users import router as users_router
 from app.api.vocabulary import router as vocabulary_router
@@ -32,6 +33,7 @@ from app.repositories.mini_story_repository import MiniStoryRepository
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.question_repository import QuestionRepository
 from app.repositories.skill_repository import LearnerSkillRepository
+from app.repositories.speaking_repository import SpeakingAttemptRepository
 from app.repositories.test_attempt_repository import TestAttemptRepository
 from app.repositories.test_repository import TestRepository
 from app.repositories.user_repository import UserRepository
@@ -66,6 +68,7 @@ async def lifespan(app: FastAPI):
         await MiniStoryRepository(db).ensure_indexes()
         await ConversationSessionRepository(db).ensure_indexes()
         await ConversationMessageRepository(db).ensure_indexes()
+        await SpeakingAttemptRepository(db).ensure_indexes()
     except Exception:
         # MongoDB may be unavailable (e.g. local dev without it running yet);
         # the app should still start, and /api/health reports the DB status.
@@ -98,6 +101,7 @@ app.include_router(mistakes_router, prefix="/api/mistakes", tags=["mistakes"])
 app.include_router(ai_router, prefix="/api/ai", tags=["ai"])
 app.include_router(ai_generation_router, prefix="/api/ai", tags=["ai-generation"])
 app.include_router(conversation_router, prefix="/api/conversation", tags=["conversation"])
+app.include_router(speech_router, prefix="/api/speech", tags=["speech"])
 
 
 @app.get("/")

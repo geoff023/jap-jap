@@ -106,6 +106,13 @@ export default function DashboardPage() {
             <div className="text-2xl">💬</div>
             <p className="mt-1 text-sm font-semibold text-slate-700">Conversation</p>
           </Link>
+          <Link
+            to="/speaking"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm transition hover:shadow-md"
+          >
+            <div className="text-2xl">🎤</div>
+            <p className="mt-1 text-sm font-semibold text-slate-700">Speaking</p>
+          </Link>
         </div>
       )}
 

@@ -259,13 +259,39 @@ these two collections and their own history view — `GET /api/progress`'s
 `conversation` skill continues to report `has_data: false` until a later
 phase gives it a real scoring mechanism.
 
+### `speaking_attempts` (Phase 9)
+
+Managed by `app/repositories/speaking_repository.py::SpeakingAttemptRepository`.
+One document per pronunciation attempt. `prompt_key` is a static lookup
+into `app/core/speaking_data.py` — the target phrase itself is denormalized
+onto the document (`target_text`) so history stays meaningful even if a
+future phase edits or removes a prompt.
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | |
+| `user_id` | string | indexed |
+| `prompt_key` | string | key into `app/core/speaking_data.py::SPEAKING_PROMPTS` |
+| `level` | string | `JLPTLevel` value, copied from the prompt |
+| `target_text` | string | the phrase the learner was asked to say |
+| `transcript` | string | what the speech provider heard |
+| `correct` | bool | `similarity >= 0.8` after normalizing whitespace/punctuation |
+| `similarity` | float | 0–1, `difflib.SequenceMatcher` ratio between normalized target and transcript |
+| `xp_earned` | int | 10 if `correct`, else 0 |
+| `created_at` | datetime (UTC) | |
+
+**Important:** `SpeakingService.submit_attempt` calls
+`SpeechToTextService.transcribe` *before* creating this document — same
+ordering lesson as Phase 8's `conversation_messages` (see above): a failed
+transcription leaves no trace, rather than a dangling attempt with no
+transcript.
+
 ## Planned Collections
 
 These will be introduced as the relevant phase implements them:
 
 ```
 kanji
-speaking_attempts
 progress_events
 achievements
 user_achievements
@@ -288,6 +314,7 @@ ai_interactions.user_id — implemented, see AIInteractionRepository.ensure_inde
 mini_stories.level, mini_stories.generated_by_user_id — implemented, see MiniStoryRepository.ensure_indexes()
 conversation_sessions.user_id — implemented, see ConversationSessionRepository.ensure_indexes()
 conversation_messages.session_id — implemented, see ConversationMessageRepository.ensure_indexes()
+speaking_attempts.user_id — implemented, see SpeakingAttemptRepository.ensure_indexes()
 ```
 
 ### Planned (minimum)

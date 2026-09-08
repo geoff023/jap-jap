@@ -59,11 +59,16 @@ Gemini never writes to the database directly.
 ```
 SpeechToTextService
     ↓
-STTProvider
+STTProvider (GeminiSTTProvider, implemented Phase 9)
 ```
 
 Speech-to-text follows the same pattern: application code depends on
 `SpeechToTextService`, backed by a swappable `STTProvider` implementation.
+Implemented in Phase 9 as `app/speech/base.py` / `app/speech/gemini_provider.py`
+— see [AI.md](AI.md) for the pipeline, and note it's a genuinely separate
+hierarchy from `AIService`/`GeminiService` above, configured via its own
+`STT_API_KEY`, even though the default provider also happens to call
+Gemini under the hood.
 
 ## Frontend Structure
 

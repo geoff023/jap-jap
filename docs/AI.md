@@ -1,12 +1,12 @@
 # AI
 
-**Status: implemented (Phases 6–8).** Grammar/vocabulary/mistake
+**Status: implemented (Phases 6–9).** Grammar/vocabulary/mistake
 explanations (Phase 6), supplementary content generation — vocabulary
 questions, grammar questions, mini stories with reading comprehension
-(Phase 7) — and character roleplay conversation (Phase 8) via Gemini,
-behind an `AIService` abstraction. Personalized feedback remains for later
-phases (10+). Speech-to-Text is still unimplemented — see the bottom of
-this doc.
+(Phase 7) — character roleplay conversation (Phase 8), and pronunciation
+transcription (Phase 9) via Gemini, behind two abstractions: `AIService`
+(text) and `SpeechToTextService` (audio — see the bottom of this doc).
+Personalized feedback remains for later phases (10+).
 
 ## Provider
 
@@ -88,6 +88,8 @@ questions (all generated on demand, not pre-seeded).
 practice — each reply is generated fresh per turn, grounded in the
 character's persona, the scenario, the learner's JLPT level, and the full
 conversation history so far.
+**Used for (Phase 9):** transcribing a learner's recorded pronunciation
+attempt into text (audio in, JSON transcript out) — nothing more.
 **Used for (later phases):** personalized natural-language feedback,
 semantic analysis.
 
@@ -106,7 +108,12 @@ by nature (there's no "correct" reply to a chat message), so it isn't
 scored at all — XP is a flat per-message amount, not a correctness-based
 one, and conversation turns are never written to `learner_skills` (would
 require fabricating a mastery number with no real basis — see
-[DATABASE.md](DATABASE.md)).
+[DATABASE.md](DATABASE.md)). Phase 9 follows the same rule from the other
+direction: Gemini is asked only to *transcribe* audio into text, never to
+judge pronunciation quality itself — `SpeakingService` does the actual
+correct/incorrect determination deterministically (a similarity threshold
+against the target text), the same "AI produces, backend decides" split as
+every other feature.
 
 ## Graceful Degradation
 
@@ -245,14 +252,82 @@ Fixed by resolving both candidate `.env` paths from `Path(__file__)` in
 `app/core/config.py`, independent of CWD. `cd backend && uvicorn ...` (the
 documented way to run the app) was unaffected either way.
 
-## Speech-to-Text
+## Speech-to-Text (Phase 9)
 
-Mirrors the AI abstraction:
+A separate abstraction from `AIService`/`GeminiService` — see
+[ARCHITECTURE.md](ARCHITECTURE.md)'s Speech Abstraction diagram:
 
 ```
-SpeechToTextService
+SpeechToTextService (app/speech/base.py)
     ↓
-STTProvider
+GeminiSTTProvider (app/speech/gemini_provider.py)
 ```
 
-Still unimplemented; see Phase 9 in [PROJECT_STATE.md](PROJECT_STATE.md).
+Application code (`SpeakingService`) depends on `SpeechToTextService`, not
+on `GeminiSTTProvider` or the `google-genai` SDK directly — same
+provider-swappability rationale as `AIService`.
+
+**Provider.** The default (and currently only) `SpeechToTextService`
+implementation is `GeminiSTTProvider`, which reuses Gemini itself — Gemini
+2.0 Flash accepts audio input directly (`types.Part.from_bytes(...)`
+alongside a text prompt), so transcription needs no separate AI vendor or
+SDK. It's configured via its own `STT_API_KEY` setting (distinct from
+`GEMINI_API_KEY`, per the original architecture) so speech features can be
+enabled/disabled independently of the AI tutor/generation/conversation
+features, even though both currently talk to the same underlying API.
+
+**Data flow**, mirroring the text pipeline exactly:
+
+```
+Audio upload → Gemini (audio input) → structured JSON → Pydantic validation ({"transcript": "..."}) → similarity scoring → database
+```
+
+`GeminiSTTProvider.transcribe` requests a JSON response with exactly one
+key (`transcript`), parses and validates it into `SpeechTranscription`
+(`app/schemas/speech.py`) the same JSON → Pydantic way as every other
+Gemini call — a malformed or empty response becomes a `SpeechServiceError`
+(mirrors `AIServiceError`), never unvalidated data reaching a route.
+
+**Scoring** happens entirely in `SpeakingService`, never by asking Gemini
+"was that pronounced correctly?": the transcript and the target phrase are
+both normalized (whitespace and common Japanese sentence punctuation
+stripped) and compared via `difflib.SequenceMatcher`'s similarity ratio; a
+ratio ≥ 0.8 counts as correct. This is a text-similarity heuristic, not
+phonetic pronunciation analysis — see the Known Issues/Technical Debt note
+in [PROJECT_STATE.md](PROJECT_STATE.md) about what that does and doesn't
+catch.
+
+**Content.** Target phrases are a static, curated roster
+(`app/core/speaking_data.py`) — same "in-code, not a database collection"
+rationale as Phase 8's characters/scenarios.
+
+**Graceful degradation** mirrors `AIService` exactly: no `STT_API_KEY` set
+→ `get_stt_service` raises `503` before constructing a provider (only
+`POST /api/speech/attempts` becomes unavailable — prompt/history browsing
+needs no provider at all); a provider failure or invalid response →
+`SpeechServiceError` → `502 Bad Gateway` with a generic message.
+
+**Testing.** `tests/fakes.py::FakeSTTService` is a test double implementing
+`SpeechToTextService`, swapped in via the `fake_stt_service` fixture
+(`app.dependency_overrides[get_stt_service]`) — automated tests never call
+the real Gemini API for transcription, same as `fake_ai_service` for text.
+`tests/test_speech.py` covers correct/incorrect scoring (by setting the
+fake's `.transcript`), punctuation-tolerant matching, the unknown-prompt
+404, the unsupported-format/oversized-upload 422s, and the 502/503
+provider-failure paths.
+
+**Privacy.** The uploaded audio bytes are sent to Gemini for transcription
+and then discarded — only the resulting `transcript` text is stored (in
+`speaking_attempts`, see [DATABASE.md](DATABASE.md)), never the audio
+itself.
+
+**Manually verified** against the real API with a non-functional local
+`STT_API_KEY`: since the sandboxed browser used for manual verification
+blocks microphone access, the recording UI's permission-denied path was
+verified in a real browser, and the actual upload-and-transcribe request
+was exercised directly over HTTP with synthetic audio bytes — confirmed it
+genuinely reaches Gemini and fails with the same friendly-502 pattern as
+every other AI feature, and that a failed transcription leaves no
+`speaking_attempts` document behind (see [PROJECT_STATE.md](PROJECT_STATE.md)
+for the full verification notes and what's still unverified: real
+microphone capture in an actual browser).

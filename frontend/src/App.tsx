@@ -16,6 +16,8 @@ import OnboardingPage from './pages/OnboardingPage'
 import ProgressPage from './pages/ProgressPage'
 import QuizPage from './pages/QuizPage'
 import RegisterPage from './pages/RegisterPage'
+import SpeakingHistoryPage from './pages/SpeakingHistoryPage'
+import SpeakingPracticePage from './pages/SpeakingPracticePage'
 import TestHistoryPage from './pages/TestHistoryPage'
 import TestResultPage from './pages/TestResultPage'
 import TestsPage from './pages/TestsPage'
@@ -156,6 +158,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <ConversationChatPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/speaking"
+            element={
+              <ProtectedRoute>
+                <SpeakingPracticePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/speaking/history"
+            element={
+              <ProtectedRoute>
+                <SpeakingHistoryPage />
               </ProtectedRoute>
             }
           />

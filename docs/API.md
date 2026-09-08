@@ -699,6 +699,73 @@ to someone else, `422` for an invalid body, `503 Service Unavailable` if no
 `GEMINI_API_KEY` is configured, `502 Bad Gateway` if Gemini fails or
 returns something that doesn't validate.
 
+### `GET /api/speech/prompts`
+
+Requires `Authorization: Bearer <token>`. Lists the curated pronunciation-
+practice target phrases, optionally filtered by `?level=N5`. No onboarding
+required (browsing is free, same pattern as scenario/session listing).
+
+```json
+[
+  {
+    "key": "n5-greeting",
+    "level": "N5",
+    "target_text": "おはようございます",
+    "target_reading": "おはようございます",
+    "target_translation": "Good morning."
+  }
+]
+```
+
+### `GET /api/speech/attempts`
+
+Requires `Authorization: Bearer <token>`. Lists the current user's past
+speaking attempts, newest first.
+
+```json
+[{ "id": "...", "prompt_key": "n5-greeting", "level": "N5", "target_text": "おはようございます", "transcript": "おはようございます", "correct": true, "similarity": 1.0, "xp_earned": 10, "created_at": "..." }]
+```
+
+### `POST /api/speech/attempts`
+
+Requires `Authorization: Bearer <token>` and a completed onboarding.
+`multipart/form-data`, not JSON — the only upload endpoint in the API.
+Transcribes the recording via `SpeechToTextService` (see [AI.md](AI.md)),
+compares it to the target phrase, and awards XP. The attempt is only
+persisted once transcription succeeds — a failed request leaves no trace,
+so a retry is indistinguishable from a first attempt.
+
+**Request** (form fields)
+
+* `prompt_key` — one of the keys from `GET /api/speech/prompts`
+* `audio` — the recorded audio file (webm/wav/mp3/ogg/mp4/m4a, ≤5 MB)
+
+**Response** (`200 OK`)
+
+```json
+{
+  "transcript": "おはようございます",
+  "target_text": "おはようございます",
+  "correct": true,
+  "similarity": 1.0,
+  "xp_earned": 10,
+  "total_xp": 153
+}
+```
+
+10 XP for a correct attempt (similarity ≥ 0.8 against the target, after
+normalizing whitespace/punctuation), 0 otherwise — same rate as quiz/test
+correct answers, since pronunciation has a real correct/incorrect check
+(unlike conversation, which pays flat XP regardless). Feeds the `speaking`
+category in the learner model (`GET /api/progress`) — the first real data
+source for `speaking`, which had none before Phase 9.
+
+Errors: `401 Unauthorized` if not authenticated, `404 Not Found` if
+onboarding hasn't been completed or `prompt_key` is unknown, `422` for an
+unsupported audio format, no audio data, or a file over 5 MB, `503 Service
+Unavailable` if no `STT_API_KEY` is configured, `502 Bad Gateway` if the
+speech provider fails or returns something that doesn't validate.
+
 ## Planned Routes (added phase by phase)
 
 These are not implemented yet — listed here to reflect the intended surface
@@ -707,7 +774,6 @@ as the project grows:
 | Route | Phase |
 |---|---|
 | `/api/kanji` | 13 |
-| `/api/speech` | 9 |
 | `/api/recommendations` | 10 |
 
 Each route follows `routes → services → repositories → MongoDB`; see

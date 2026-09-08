@@ -32,6 +32,7 @@ async def reset_database():
     await db["mini_stories"].delete_many({})
     await db["conversation_sessions"].delete_many({})
     await db["conversation_messages"].delete_many({})
+    await db["speaking_attempts"].delete_many({})
     # AI-generated questions are per-test state, unlike the seeded ones —
     # only clear the ones this test run could have created.
     await db["questions"].delete_many({"source": "ai_generated"})
@@ -125,3 +126,19 @@ async def fake_ai_service():
     app.dependency_overrides[get_ai_service] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_ai_service, None)
+
+
+@pytest_asyncio.fixture
+async def fake_stt_service():
+    """Override the app's real get_stt_service dependency with a fake for
+    the duration of one test — automated tests must never call the real
+    Gemini API. Yields the fake so a test can inspect `.calls` or set
+    `.transcript` / `.should_fail`."""
+    from app.api.deps import get_stt_service
+    from app.main import app
+    from tests.fakes import FakeSTTService
+
+    fake = FakeSTTService()
+    app.dependency_overrides[get_stt_service] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_stt_service, None)

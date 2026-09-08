@@ -22,10 +22,13 @@ from app.repositories.mini_story_repository import MiniStoryRepository
 from app.repositories.profile_repository import LearnerProfileRepository
 from app.repositories.question_repository import QuestionRepository
 from app.repositories.skill_repository import LearnerSkillRepository
+from app.repositories.speaking_repository import SpeakingAttemptRepository
 from app.repositories.test_attempt_repository import TestAttemptRepository
 from app.repositories.test_repository import TestRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.vocabulary_repository import VocabularyRepository
+from app.speech.base import SpeechToTextService
+from app.speech.gemini_provider import GeminiSTTProvider
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -102,6 +105,12 @@ def get_conversation_message_repository(
     return ConversationMessageRepository(db)
 
 
+def get_speaking_attempt_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> SpeakingAttemptRepository:
+    return SpeakingAttemptRepository(db)
+
+
 @lru_cache
 def _build_gemini_service(api_key: str) -> GeminiService:
     return GeminiService(api_key)
@@ -117,6 +126,24 @@ def get_ai_service(settings: Settings = Depends(get_settings)) -> AIService:
             detail="AI features are not configured. Set GEMINI_API_KEY to enable them.",
         )
     return _build_gemini_service(settings.gemini_api_key)
+
+
+@lru_cache
+def _build_gemini_stt_provider(api_key: str) -> GeminiSTTProvider:
+    return GeminiSTTProvider(api_key)
+
+
+def get_stt_service(settings: Settings = Depends(get_settings)) -> SpeechToTextService:
+    """Mirrors get_ai_service, but gated on STT_API_KEY rather than
+    GEMINI_API_KEY — speech features are configured independently of the
+    AI tutor/generation features, even though both currently talk to
+    Gemini under the hood (see docs/AI.md)."""
+    if not settings.stt_enabled or settings.stt_api_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Speech features are not configured. Set STT_API_KEY to enable them.",
+        )
+    return _build_gemini_stt_provider(settings.stt_api_key)
 
 
 async def get_current_user(

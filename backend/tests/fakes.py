@@ -2,6 +2,8 @@ from app.ai.base import AIService, AIServiceError
 from app.schemas.ai import GrammarExplanation, MistakeExplanation, VocabularyExplanation
 from app.schemas.ai_generation import ComprehensionQuestion, GeneratedMiniStory, GeneratedQuestion
 from app.schemas.conversation import ConversationReply
+from app.schemas.speech import SpeechTranscription
+from app.speech.base import SpeechServiceError, SpeechToTextService
 
 
 class FakeAIService(AIService):
@@ -125,3 +127,22 @@ class FakeAIService(AIService):
             reply=f"（{character_name}より）はい、かしこまりました。",
             translation=f"(From {character_name}) Yes, understood.",
         )
+
+
+class FakeSTTService(SpeechToTextService):
+    """Test double standing in for GeminiSTTProvider — no automated test
+    should ever call the real Gemini API for transcription. Defaults to
+    returning a transcript that exactly matches the "n5-greeting" prompt's
+    target text; set `.transcript` to something else to exercise the
+    incorrect-answer path, or `.should_fail = True` for the 502 path."""
+
+    def __init__(self, should_fail: bool = False, transcript: str = "おはようございます"):
+        self.should_fail = should_fail
+        self.transcript = transcript
+        self.calls: list[tuple] = []
+
+    async def transcribe(self, audio_bytes: bytes, mime_type: str) -> SpeechTranscription:
+        self.calls.append(("transcribe", len(audio_bytes), mime_type))
+        if self.should_fail:
+            raise SpeechServiceError("fake failure")
+        return SpeechTranscription(transcript=self.transcript)
